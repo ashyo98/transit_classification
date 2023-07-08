@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 import lightkurve as lk
 from scipy.optimize import curve_fit
+import csv
+import os
 
 def linear_func(x, a, b):
     """
@@ -62,7 +64,7 @@ def stitch(lc_collection):
         
     return tot_time, tot_flux, tot_flux_err, tot_qual
 
-def collect_curves(n_curves, n_timesteps=1000, pct_transit=48.8):
+def collect_curves(n_curves, n_timesteps=1000, downsize_method='interpolate', pct_transit=48.8):
     """
     Collect raw light curves into flux and time arrays (of shape [n_curves, n_timesteps]).
     Construct corresponding array (of shape [n_curves]) containing labels (1 = transit, 0 = no transit).
@@ -71,8 +73,9 @@ def collect_curves(n_curves, n_timesteps=1000, pct_transit=48.8):
     Parameters:
         n_curves: number of curves to download (will be approximate if percentages don't work out)
         n_timesteps: number of timesteps to interpolate to (at some point we could also try truncation)
-        pct_transit: percent of returned dataset that contains a transt. Default is the overall perentage
-                    of the 150,000 available Keplar curves that have transits. 
+        downsize_method: method to force curves to the n_timesteps. Options are 'interpolate' or 'truncate'.
+        pct_transit: percent of returned dataset that contains a transt. Default is 48.8, which is 
+                    the overall perentage of the 150,000 available Keplar curves that have transits. 
     ----------
     Returns:
         all_curves: numpy array of shape [n_curves, n_timesteps] containing light curve flux values
@@ -84,19 +87,25 @@ def collect_curves(n_curves, n_timesteps=1000, pct_transit=48.8):
     data = pd.read_csv('Data/exoplanet_archive_KOIs.csv')
     all_nontransit_ids = data.loc[data['koi_disposition'] == 'FALSE POSITIVE']['kepid'].to_list()
     nontransit_ids = np.random.choice(all_nontransit_ids, size = int(n_curves*(1-pct_transit/100)))
-    all_labels = np.zeros(len(nontransit_ids))
+    all_ids = np.copy(nontransit_ids) 
 
     # Get IDs of transit curves 
     all_transit_ids = data.loc[data['koi_disposition'] == 'CONFIRMED']['kepid'].to_list()
     transit_ids = np.random.choice(all_transit_ids, size = int(n_curves*(pct_transit/100)))
-    all_labels = np.concatenate((all_labels, np.ones(len(transit_ids))))
+    all_ids = np.concatenate((all_ids, transit_ids))
+
+    # Randomize id list 
+    all_ids = all_ids[np.random.permutation(len(all_ids))]
 
     # Fill array with transit and non-transit curves
-    all_curves = np.zeros((len(nontransit_ids)+len(transit_ids), n_timesteps))
-    all_times = np.zeros((len(nontransit_ids)+len(transit_ids), n_timesteps))
+    all_curves = np.zeros((len(all_ids), n_timesteps))
+    all_times = np.zeros((len(all_ids), n_timesteps))
+    all_labels = np.zeros(len(all_ids))
     i = 0
-    for star in nontransit_ids:
-        star = np.int(star)
+    print(f'Downloading {len(all_ids)} light curves')
+    for star in all_ids:
+        star = int(star)
+        print(f'\tStar {i}', end='\r')
         # Download full light curve
         curve = lk.search_lightcurve(f'KIC{star}', author='Kepler', cadence='long').download_all()
         # "Stich" together quarters
@@ -104,28 +113,101 @@ def collect_curves(n_curves, n_timesteps=1000, pct_transit=48.8):
         # Set poor quality data to NaN
         good = (quality == 0) * (flux_err > 0) * (np.isfinite(time)) * (np.isfinite(flux)) * (np.isfinite(flux_err))
         flux[np.invert(good)] = np.NaN
+        # Force to length n_timesteps
+        if downsize_method == 'interpolate':
+            flux = np.interp(np.linspace(0,n_timesteps-1,n_timesteps), np.linspace(0,n_timesteps-1,len(flux)), flux)
+            time = np.interp(np.linspace(0,n_timesteps-1,n_timesteps), np.linspace(0,n_timesteps-1,len(time)), time)
+        if downsize_method == 'truncate':
+            flux = flux[0:n_timesteps]
+            time = time[0:n_timesteps]
+        # Get label
+        label = int(1) if id in transit_ids else int(0)
         # Add time and flux to arrays
-        all_times[i] = np.interp(np.linspace(0,n_timesteps-1,n_timesteps), np.linspace(0,n_timesteps-1,len(time)), time)
-        all_curves[i] = np.interp(np.linspace(0,n_timesteps-1,n_timesteps), np.linspace(0,n_timesteps-1,len(flux)), flux)
+        all_times[i] = time
+        all_curves[i] = flux
+        all_labels[i] = label
         i += 1
-    for star in transit_ids:
-        star = np.int(star)
-        # Download full light curve
-        curve = lk.search_lightcurve(f'KIC{star}', author='Kepler', cadence='long').download_all()
-        # "Stich" together quarters
-        time, flux, flux_err, quality = stitch(curve)
-        # Set poor quality data to NaN
-        good = (quality == 0) * (flux_err > 0) * (np.isfinite(time)) * (np.isfinite(flux)) * (np.isfinite(flux_err))
-        flux[np.invert(good)] = np.NaN
-        # Add time and flux to arrays
-        all_times[i] = np.interp(np.linspace(0,n_timesteps-1,n_timesteps), np.linspace(0,n_timesteps-1,len(time)), time)
-        all_curves[i] = np.interp(np.linspace(0,n_timesteps-1,n_timesteps), np.linspace(0,n_timesteps-1,len(flux)), flux)
-        i += 1
-
-    # Randomize arrays (same randomization)
-    p = np.random.permutation(len(all_curves))
-    all_curves = all_curves[p]
-    all_times = all_times[p]
-    all_labels = all_labels[p]
 
     return all_curves, all_times, all_labels
+
+
+def collect_curves_tofiles(n_curves, n_timesteps=1000, downsize_method='interpolate', pct_transit=48.8, savepath='../LC_Data'):
+    """
+    Add raw light curves (row-wise) into csv files storing flux, time, and labels (1 = transit, 0 = no transit).
+    Every call to this function will add rows to these csv files. 
+    ----------
+    Parameters:
+        n_curves: number of curves to download (will be approximate if percentages don't work out)
+        n_timesteps: number of timesteps to interpolate or to
+        downsize_method: method to force curves to n_timesteps. Options are 'interpolate' or 'truncate'.
+        pct_transit: percent of returned dataset that contains a transt. Default is 48.8, which is 
+                    the overall perentage of the 150,000 available Keplar curves that have transits. 
+        savepath = path in which to create the stored files
+    ----------
+    Generates or adds to the following 3 files:
+        savepath/flux_all_[n_timesteps]_[pct_transits].csv: flux values, with each row representing one curve.
+        savepath/time_all_[n_timesteps]_[pct_transits].csv: corresponding time values
+        savepath/labels_all_[n_timesteps]_[pct_transits].csv: corresponding labels (1 per row)
+    """
+
+    # Get IDs of non-transit curves
+    data = pd.read_csv('Data/exoplanet_archive_KOIs.csv')
+    all_nontransit_ids = data.loc[data['koi_disposition'] == 'FALSE POSITIVE']['kepid'].to_list()
+    nontransit_ids = np.random.choice(all_nontransit_ids, size = int(n_curves*(1-pct_transit/100)))
+    all_ids = np.copy(nontransit_ids)
+
+    # Get IDs of transit curves 
+    all_transit_ids = data.loc[data['koi_disposition'] == 'CONFIRMED']['kepid'].to_list()
+    transit_ids = np.random.choice(all_transit_ids, size = int(n_curves*(pct_transit/100)))
+    all_ids = np.concatenate((all_ids, transit_ids))
+
+    # Randomize id list 
+    all_ids = all_ids[np.random.permutation(len(all_ids))]
+
+    # Create files if they don't exist, else check that they have the same length
+    filepaths = []
+    filelengths = []
+    for tag in ['flux', 'time', 'label']:
+        filepath = f"{savepath}/{tag}_all_{n_timesteps}_{pct_transit}.csv"
+        filepaths.append(filepath)
+        if os.path.exists(filepath) == False:
+            print(f'Creating {filepath} to store {tag}')
+            open(filepath, 'w')
+            filelengths.append([0])
+        else:
+            print(f'Adding {tag} rows to {filepath}')
+            filelengths.append(len(pd.read_csv(filepath, header=None, delimiter=',')))
+    if all(element == filelengths[0] for element in filelengths) == False:
+        raise Exception(f'{filepaths[0]}, {filepaths[1]}, and {filepaths[2]}, do not all have the same number of rows.')
+        
+    # Download curves and append to files
+    with open(rf'{filepaths[0]}','a') as f1, open(rf'{filepaths[1]}','a') as f2, open(rf'{filepaths[2]}','a') as f3:
+        writer1=csv.writer(f1)
+        writer2=csv.writer(f2)
+        writer3=csv.writer(f3)
+        i = 0
+        print(f'Downloading {len(all_ids)} light curves')
+        for star in all_ids:
+            star = int(star)
+            print(f'\tStar {i}', end='\r')
+            # Download full light curve
+            curve = lk.search_lightcurve(f'KIC{star}', author='Kepler', cadence='long').download_all()
+            # "Stich" together quarters
+            time, flux, flux_err, quality = stitch(curve)
+            # Set poor quality data to NaN
+            good = (quality == 0) * (flux_err > 0) * (np.isfinite(time)) * (np.isfinite(flux)) * (np.isfinite(flux_err))
+            flux[np.invert(good)] = np.NaN
+            # Force to length n_timesteps
+            if downsize_method == 'interpolate':
+                flux = np.interp(np.linspace(0,n_timesteps-1,n_timesteps), np.linspace(0,n_timesteps-1,len(flux)), flux)
+                time = np.interp(np.linspace(0,n_timesteps-1,n_timesteps), np.linspace(0,n_timesteps-1,len(time)), time)
+            if downsize_method == 'truncate':
+                flux = flux[0:n_timesteps]
+                time = time[0:n_timesteps]
+            # Get label
+            label = 1 if id in transit_ids else 0
+            # Add to csv files
+            writer1.writerow(np.array(flux))
+            writer2.writerow(np.array(time))
+            writer3.writerow(np.array([label]))
+            i += 1
