@@ -2,6 +2,8 @@
 Functions for use in Transit Classification aglorithms
 '''
 
+##### Data loading and pre-processing functions #####
+
 import numpy as np
 import pandas as pd
 import lightkurve as lk
@@ -211,3 +213,66 @@ def collect_curves_tofiles(n_curves, n_timesteps=1000, downsize_method='interpol
             writer2.writerow(np.array(time))
             writer3.writerow(np.array([label]))
             i += 1
+
+#### Functions for use with NNs (for Leah) ####
+import torch
+from torch import nn
+from sklearn.datasets import make_classification
+from torch.utils.data import Dataset, TensorDataset, DataLoader
+
+def check_inputs(train_ds, train_loader):
+    '''
+    Succinctly check that dataloaders are constructed as they should be
+    ''' 
+
+    print('Train data:')
+    print(f'     {len(train_ds)} obs, broken into {len(train_loader)} batches')
+    train_features, train_labels = next(iter(train_loader))
+    shape = train_features.size()
+    print(f'     Each batch has data of shape {train_features.size()}, e.g. {shape[0]} obs, {shape[1]} features') #{[shape[2], shape[3]]} pixels each, {shape[1]} layers (features)')
+    shape = train_labels.size()
+    print(f'     Each batch has labels of shape {train_labels.size()}')#, e.g. {shape[0]} obs, {shape[1]} classes') #{[shape[2], shape[3]]} pixels each, {shape[1]} layers (classes)')
+
+
+class MyDataset(Dataset):
+  '''
+  Pytorch Datasaet object to load in data
+  '''
+
+  def __init__(self, X_train, y_train, norm=True, impute_nans=True):
+    self.X = torch.from_numpy(X_train.astype(np.float32))
+    self.y = np.squeeze(torch.from_numpy(y_train).type(torch.LongTensor))
+    self.len = self.X.shape[0]
+    self.norm = norm
+    self.impute_nans = impute_nans
+  
+  def __getitem__(self, index):
+    X = self.X[index]
+    if self.norm: 
+      X = ((X - np.nanmin(X))/(np.nanmax(X) - np.nanmin(X))) # min-max normalization to [0, 1] 
+    if self.impute_nans: 
+      X_before = X.clone().detach()
+      X = torch.tensor(pd.Series(X).interpolate(limit_direction='both')) # fill NaNs with means of nieghboring values
+    y = self.y[index]
+
+    return X, y
+    
+  def __len__(self):
+    return self.len
+
+
+class SimpleNN(nn.Module):
+  '''
+  Simple two-layer feed-foward NN
+  Oddly, this works very well. 
+  '''
+
+  def __init__(self, input_dim, output_dim, hidden_layers): 
+    super(SimpleNN, self).__init__()
+    self.linear1 = nn.Linear(input_dim, hidden_layers) 
+    self.linear2 = nn.Linear(hidden_layers, output_dim) # so becasue output_dim is num classes, outputs will be class probs?
+    
+  def forward(self, x):
+    x = torch.sigmoid(self.linear1(x))
+    x = self.linear2(x)
+    return x
