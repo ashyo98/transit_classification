@@ -162,11 +162,9 @@ def collect_curves_tofiles(n_curves, n_timesteps=1000, downsize_method='interpol
     all_transit_ids = data.loc[data['koi_disposition'] == 'CONFIRMED']['kepid'].to_list()
     transit_ids = np.random.choice(all_transit_ids, size = int(n_curves*(pct_transit/100)))
     all_ids = np.concatenate((all_ids, transit_ids))
-    print(all_ids)
 
     # Randomize id list 
     all_ids = all_ids[np.random.permutation(len(all_ids))]
-    print(all_ids)
  
     # Create files if they don't exist, else check that they have the same length
     filepaths = []
@@ -208,9 +206,8 @@ def collect_curves_tofiles(n_curves, n_timesteps=1000, downsize_method='interpol
             if downsize_method == 'truncate':
                 flux = flux[0:n_timesteps]
                 time = time[0:n_timesteps]
-            Get label
+            # Get label
             label = 1 if star in transit_ids else 0
-            print(f'id {star}, label {label}')
             # Add to csv files
             writer1.writerow(np.array(flux))
             writer2.writerow(np.array(time))
