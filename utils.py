@@ -180,8 +180,9 @@ def collect_curves_tofiles(n_curves, n_timesteps=1000, downsize_method='interpol
             open(filepath, 'w')
             filelengths.append([0])
         else:
-            print(f'Adding {tag} to {filepath}')
-            filelengths.append(len(pd.read_csv(filepath, header=None, delimiter=',')))
+            length = len(pd.read_csv(filepath, header=None, delimiter=','))
+            print(f'Adding {tag} to {filepath} (currently contains {length} rows)')
+            filelengths.append(length)
     if all(element == filelengths[0] for element in filelengths) == False:
         raise Exception(f'{filepaths[0]}, {filepaths[1]}, and {filepaths[2]}, have different number of rows ({filelengths[0]}, {filelengths[1]}, and {filelengths[2]}).')
 
@@ -335,11 +336,8 @@ class ConvNN1(nn.Module):
         nn.Linear(64, 64))
 
   def forward(self, x):
-    print(f'Before convs {x.shape}')
     x = self.convs(x) 
-    print(f'After convs {x.shape}')
     x = x.view(x.size(0), -1)
-    print(f'After reshape {x.shape}')
     x = self.linears(x) 
     return x
 
