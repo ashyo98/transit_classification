@@ -243,7 +243,6 @@ def collect_curves_tofiles(n_curves, n_timesteps=1000, downsize_method='interpol
             writer3.writerow(np.array([label]))
             i += 1
 
-
 #### Functions for use with NNs ####
 import torch
 from torch import nn
