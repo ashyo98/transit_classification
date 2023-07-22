@@ -1,3 +1,4 @@
-# Data/flux_all_1000_50.csv
-# Data/labels_all_1000_50.csv
-# Data/time_all_1000_50.csv
+Data/flux_*
+Data/labels_*
+Data/time_*
+Standard_Algorithms_local.ipynb
