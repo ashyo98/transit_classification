@@ -10,6 +10,8 @@ import lightkurve as lk
 from scipy.optimize import curve_fit
 import csv
 import os
+from scipy.signal import medfilt
+from scipy.stats import binned_statistic
 
 def linear_func(x, a, b):
     """
@@ -25,7 +27,7 @@ def linear_func(x, a, b):
     """
     return a*x + b
 
-def stitch(lc_collection): 
+def stitch_quarters(lc_collection): 
     """
     Linearly detrend each "quarter" (interval of observing) of the data, 
     and combine them together. We do this to correct for offsets between quarters 
@@ -111,7 +113,7 @@ def collect_curves(n_curves, n_timesteps=1000, downsize_method='interpolate', pc
         # Download full light curve
         curve = lk.search_lightcurve(f'KIC{star}', author='Kepler', cadence='long').download_all()
         # "Stich" together quarters
-        time, flux, flux_err, quality = stitch(curve)
+        time, flux, flux_err, quality = stitch_quarters(curve)
         # Set poor quality data to NaN
         good = (quality == 0) * (flux_err > 0) * (np.isfinite(time)) * (np.isfinite(flux)) * (np.isfinite(flux_err))
         flux[np.invert(good)] = np.NaN
@@ -133,20 +135,23 @@ def collect_curves(n_curves, n_timesteps=1000, downsize_method='interpolate', pc
     return all_curves, all_times, all_labels
 
 
-def collect_curves_tofiles(n_curves, n_timesteps=1000, downsize_method='interpolate', pct_transit=48.8, savepath='../LC_Data'):
+def collect_curves_tofiles(n_curves, n_timesteps=1000, downsize_method='interpolate', phase_fold=False, smooth=False, pct_transit=48.8, savepath='../LC_Data'):
     """
     Add raw light curves (row-wise) into csv files storing flux, time, and labels (1 = transit, 0 = no transit).
-    Every call to this function will add rows to these csv files. 
-    NOTE: this should save the file if the error is lightcurve failing to download the next star, 
-          but if something happens (e.g. user interupts) during file opening, I think sometimes the 
-          files done't get saved correctly. 
+    Every call to this function will add rows to these csv files.
+    NOTE: this should save the file if the error is lightcurve failing to download the next star,
+          but if something happens (e.g. user interupts) during file opening, I think sometimes the
+          files done't get saved correctly.
     ----------
     Parameters:
         n_curves: number of curves to download (will be approximate if percentages don't work out)
-        n_timesteps: number of timesteps to interpolate or to
+        n_timesteps: number of timesteps to interpolate or truncate to. If "phase fold", number of bins to
+                     use to bin folded lightcurve.
         downsize_method: method to force curves to n_timesteps. Options are 'interpolate' or 'truncate'.
-        pct_transit: percent of returned dataset that contains a transt. Default is 48.8, which is 
-                    the overall perentage of the 150,000 available Keplar curves that have transits. 
+        smooth: if True, will smooth returned lightcurves, if False will not.
+        phase_fold: if True, will phase fold returned lightcurves, if False will not.
+        pct_transit: percent of returned dataset that contains a transt. Default is 48.8, which is
+                    the overall perentage of the 150,000 available Keplar curves that have transits.
         savepath = path in which to create the stored files
     ----------
     Generates or adds to the following 3 files:
@@ -154,21 +159,17 @@ def collect_curves_tofiles(n_curves, n_timesteps=1000, downsize_method='interpol
         savepath/time_all_[n_timesteps]_[pct_transits].csv: corresponding time values
         savepath/labels_all_[n_timesteps]_[pct_transits].csv: corresponding labels (1 per row)
     """
-
     # Get IDs of non-transit curves
     data = pd.read_csv('Data/exoplanet_archive_KOIs.csv')
     all_nontransit_ids = data.loc[data['koi_disposition'] == 'FALSE POSITIVE']['kepid'].to_list()
     nontransit_ids = np.random.choice(all_nontransit_ids, size = int(n_curves*(1-pct_transit/100)))
     all_ids = np.copy(nontransit_ids)
-
-    # Get IDs of transit curves 
+    # Get IDs of transit curves
     all_transit_ids = data.loc[data['koi_disposition'] == 'CONFIRMED']['kepid'].to_list()
     transit_ids = np.random.choice(all_transit_ids, size = int(n_curves*(pct_transit/100)))
     all_ids = np.concatenate((all_ids, transit_ids))
-
-    # Randomize id list 
+    # Randomize id list
     all_ids = all_ids[np.random.permutation(len(all_ids))]
- 
     # Create files if they don't exist, else check that they have the same length
     filepaths = []
     filelengths = []
@@ -180,12 +181,10 @@ def collect_curves_tofiles(n_curves, n_timesteps=1000, downsize_method='interpol
             open(filepath, 'w')
             filelengths.append([0])
         else:
-            length = len(pd.read_csv(filepath, header=None, delimiter=','))
-            print(f'Adding {tag} to {filepath} (currently contains {length} rows)')
-            filelengths.append(length)
+            print(f'Adding {tag} to {filepath}')
+            filelengths.append(len(pd.read_csv(filepath, header=None, delimiter=',')))
     if all(element == filelengths[0] for element in filelengths) == False:
-        raise Exception(f'{filepaths[0]}, {filepaths[1]}, and {filepaths[2]}, have different number of rows ({filelengths[0]}, {filelengths[1]}, and {filelengths[2]}).')
-
+        raise Exception(f'{filepaths[0]}, {filepaths[1]}, and {filepaths[2]}, have different number of rows ({filelengths[0]},{filelengths[1]}, and {filelengths[2]}).')
     # Download curves and append to files
     with open(rf'{filepaths[0]}','a') as f1, open(rf'{filepaths[1]}','a') as f2, open(rf'{filepaths[2]}','a') as f3:
         writer1=csv.writer(f1)
@@ -195,11 +194,38 @@ def collect_curves_tofiles(n_curves, n_timesteps=1000, downsize_method='interpol
         print(f'Downloading {len(all_ids)} light curves')
         for star in all_ids:
             star = int(star)
+            # Get label
+            label = 1 if (star in transit_ids) else 0
             print(f'\tStar {i}', end='\r')
             # Download full light curve
             curve = lk.search_lightcurve(f'KIC{star}', author='Kepler', cadence='long').download_all()
             # "Stich" together quarters
-            time, flux, flux_err, quality = stitch(curve)
+            time, flux, flux_err, quality = stitch_quarters(curve)
+            if smooth:
+                # Smooth to remove stellar variability
+                flux = flux/medfilt(flux,51)
+            if phase_fold:
+                # Phase fold
+                curve = curve.stitch().flatten(window_length=901).remove_outliers()
+                period = np.linspace(1, 30, 10000) # periods to search
+                # Create a BLSPeriodogram
+                bls = curve.to_periodogram(method='bls', period=period, frequency_factor=500)
+                period = bls.period_at_max_power
+                t0 = bls.transit_time_at_max_power
+                dur = bls.duration_at_max_power
+                folded = curve.fold(period=period, epoch_time=t0)
+                folded_flux = folded.flux.value
+                folded_time = folded.time.value
+                planet_model = bls.get_transit_model(period=period,
+                                       transit_time=t0,
+                                       duration=dur).fold(period, t0)
+                binned, bin_edges, binnumber = binned_statistic(folded_time, folded_flux, 'median', bins = n_timesteps)
+                folded_smoothed_time = bin_edges[1:]
+                folded_smoothed_flux = medfilt(binned,3)
+                writer1.writerow(np.array(folded_smoothed_flux))
+                writer2.writerow(np.array(folded_smoothed_time))
+                writer3.writerow(np.array([label]))
+                continue
             # Set poor quality data to NaN
             good = (quality == 0) * (flux_err > 0) * (np.isfinite(time)) * (np.isfinite(flux)) * (np.isfinite(flux_err))
             flux[np.invert(good)] = np.NaN
@@ -210,13 +236,12 @@ def collect_curves_tofiles(n_curves, n_timesteps=1000, downsize_method='interpol
             if downsize_method == 'truncate':
                 flux = flux[0:n_timesteps]
                 time = time[0:n_timesteps]
-            # Get label
-            label = 1 if (star in transit_ids) else 0
             # Add to csv files
             writer1.writerow(np.array(flux))
             writer2.writerow(np.array(time))
             writer3.writerow(np.array([label]))
             i += 1
+
 
 #### Functions for use with NNs ####
 import torch
@@ -341,37 +366,41 @@ class ConvNN1(nn.Module):
     x = self.linears(x) 
     return x
 
+
 class ConvNN2(nn.Module):
   '''
   1D convolutional NN
   - Based on https://jovian.com/ningboming/time-series-classification-cnn
   '''
 
-  def __init__(self, in_channels, out_channels, conv_channels=[64, 128, 256], k_size=3): 
+  def __init__(self, in_channels, out_classes, channels=[64, 128, 256], in_samps=1000, samps=[1024, 512], k_size=3): 
     super(ConvNN2, self).__init__()
+    print(int(channels[-1]*in_samps/4))
+    print(samps[0])
 
     self.convs = nn.Sequential(
-        nn.Conv1d(in_channels, conv_channels[0], kernel_size=k_size, stride=1, padding=1),
+        nn.Conv1d(in_channels, channels[0], kernel_size=k_size, stride=1, padding=1), # [5, 1, 1000]
         nn.ReLU(),
-        nn.Conv1d(conv_channels[0], conv_channels[1], kernel_size=k_size, stride=1, padding=1),
+        nn.Conv1d(channels[0], channels[1], kernel_size=k_size, stride=1, padding=1), # [5, 64, 1000]
         nn.ReLU(),
-        nn.MaxPool1d(2), 
-        nn.Conv1d(conv_channels[1], conv_channels[2], kernel_size=k_size, stride=1, padding=1),
+        nn.MaxPool1d(2),                                                              # [5, 64, 500]
+        nn.Conv1d(channels[1], channels[2], kernel_size=k_size, stride=1, padding=1), # [5, 128, 500]
         nn.ReLU(),
-        nn.Conv1d(conv_channels[2], conv_channels[2], kernel_size=k_size, stride=1, padding=1),
+        nn.Conv1d(channels[2], channels[2], kernel_size=k_size, stride=1, padding=1), # [5, 256, 500]
         nn.ReLU(),
-        nn.MaxPool1d(2)) 
+        nn.MaxPool1d(2))                                                              # [5, 256, 250]
 
     self.linears = nn.Sequential(
         nn.Flatten(), 
-        nn.Linear(256*31, 1024),
+        nn.Linear(int(channels[-1]*in_samps/4), samps[0]), # pool by 2, x2, so samps dim / 4
         nn.ReLU(),
-        nn.Linear(1024, 512),
+        nn.Linear(samps[0], samps[1]),
         nn.ReLU(),
-        nn.Linear(512, out_channels))
+        nn.Linear(samps[1], out_classes))
 
   def forward(self, x):
     x = self.convs(x) 
     x = self.linears(x) 
     return x  
+
 
