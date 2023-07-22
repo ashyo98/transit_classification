@@ -176,7 +176,7 @@ def collect_curves_tofiles(n_curves, n_timesteps=1000, downsize_method='interpol
     filepaths = []
     filelengths = []
     for tag in ['flux', 'time', 'labels']:
-        filepath = f"{savepath}/{tag}_all_{n_timesteps}_{pct_transit}.csv"
+        filepath = f"{savepath}/{tag}_phase_{n_timesteps}_{pct_transit}.csv"
         filepaths.append(filepath)
         if os.path.exists(filepath) == False:
             print(f'Creating {filepath} to store {tag}')
@@ -227,7 +227,7 @@ def collect_curves_tofiles(n_curves, n_timesteps=1000, downsize_method='interpol
                 writer1.writerow(np.array(folded_smoothed_flux))
                 writer2.writerow(np.array(folded_smoothed_time))
                 writer3.writerow(np.array([label]))
-                i = i+1
+                i += 1
                 continue
             # Set poor quality data to NaN
             good = (quality == 0) * (flux_err > 0) * (np.isfinite(time)) * (np.isfinite(flux)) * (np.isfinite(flux_err))
