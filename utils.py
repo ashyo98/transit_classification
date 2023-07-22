@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 import lightkurve as lk
 from scipy.optimize import curve_fit
+from scipy.signal import medfilt
+from scipy.stats import binned_statistic
 import csv
 import os
 from scipy.signal import medfilt
@@ -200,7 +202,7 @@ def collect_curves_tofiles(n_curves, n_timesteps=1000, downsize_method='interpol
             # Download full light curve
             curve = lk.search_lightcurve(f'KIC{star}', author='Kepler', cadence='long').download_all()
             # "Stich" together quarters
-            time, flux, flux_err, quality = stitch_quarters(curve)
+            time, flux, flux_err, quality = stitch(curve)
             if smooth:
                 # Smooth to remove stellar variability
                 flux = flux/medfilt(flux,51)
