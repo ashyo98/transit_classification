@@ -317,7 +317,8 @@ def validate(val_loader, model):
     '''
     Function to calculate validation accuracy
     '''
-    num_correct = 0
+    TP, TN, FP, FN = 0, 0, 0, 0
+    P = 0
     num_obs = 0
     model.eval() # set model into eval mode
     with torch.no_grad():
@@ -327,11 +328,18 @@ def validate(val_loader, model):
             probs = torch.sigmoid(model(x)) # call model to get output, apply sigmoid to get class probs [batch_size, n_classes]
             preds = np.argmax(probs, axis=1) # turn class probs into 1D predicted class [batch_size] by returning idx of max prob
             y = np.argmax(y, axis=1) # turn one-hot labels into 1D labels by returning idx where y is 1
-            num_correct += len(np.where(preds == y)[0]) #(preds == y).sum()
+            TP += len(np.where((preds == 1) & (y == 1))[0])
+            TN += len(np.where((preds == 0) & (y == 0))[0])
+            FP += len(np.where((preds == 1) & (y == 0))[0])
+            FN += len(np.where((preds == 0) & (y == 1))[0])
+            P += len(np.where(y == 1)[0])
             num_obs += x.shape[0]
-    accuracy = num_correct/num_obs*100
+    accuracy = (TP+TN)/num_obs*100
+    # print(TP)
+    # print(P)
+    recall = TP/P*100
 
-    return accuracy
+    return accuracy, recall
 
 
 class LinearNN(nn.Module):
