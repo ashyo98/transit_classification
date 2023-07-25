@@ -225,6 +225,7 @@ def collect_curves_tofiles(n_curves, n_timesteps=1000, downsize_method='interpol
                 writer1.writerow(np.array(folded_smoothed_flux))
                 writer2.writerow(np.array(folded_smoothed_time))
                 writer3.writerow(np.array([label]))
+                i = i+1
                 continue
             # Set poor quality data to NaN
             good = (quality == 0) * (flux_err > 0) * (np.isfinite(time)) * (np.isfinite(flux)) * (np.isfinite(flux_err))
@@ -268,23 +269,41 @@ class MyDataset(Dataset):
   Pytorch Datasaet object to load in data
   '''
 
-  def __init__(self, X_train, y_train, norm=True, impute_nans=True):
-    self.x = torch.from_numpy(X_train.astype(np.float32))
-    self.y = np.squeeze(torch.from_numpy(y_train))#.type(torch.LongTensor))
-    self.len = self.x.shape[0]
+  def __init__(self, X1, y, X2=None, norm=True, impute_nans=True):
+    self.x1 = X1
+    self.x2 = X2
+    self.y = y
+    self.len = self.y.shape[0]
     self.norm = norm
     self.impute_nans = impute_nans
   
   def __getitem__(self, index):
     # Get lightcurve
-    x = self.x[index]
+    x = torch.from_numpy(self.x1.astype(np.float32))
+    x = x[index]
+    x_prenorm = x.clone().detach()
     if self.norm: 
       x = ((x - np.nanmin(x))/(np.nanmax(x) - np.nanmin(x))) # min-max normalization to [0, 1] 
+    x_preimpute = x.clone().detach()
     if self.impute_nans: 
       x = torch.tensor(pd.Series(x).interpolate(limit_direction='both')) # fill NaNs with means of nieghboring values
-    X = np.zeros((1, len(x)), dtype=np.float32) # Add dummy axis since only one channel
-    X[0, :] = x 
+      if torch.any(torch.isnan(x)): 
+        print(f'{index} Initial {x_prenorm[0:100]}') 
+        print(f'{index} After norm {x_preimpute[0:100]}')
+        print(f'{index} SOME STILL NAN After impute {x[0:100]}\n')
+        a=b
+        # print(f'Are all befores nan?: {torch.any(torch.isnan(x_pre))}')
+    if self.x2 is None:
+        X = np.zeros((1, len(x)), dtype=np.float32) # Add dummy axis since only one channel
+        X[0, :] = x 
+    else: 
+        t = torch.from_numpy(self.x2.astype(np.float32))
+        t = t[index]
+        X = np.zeros((2, len(x)), dtype=np.float32) # Add space for second channel
+        X[0, :] = x 
+        X[1, :] = t
     # Get label
+    y = np.squeeze(torch.from_numpy(self.y))#.type(torch.LongTensor))
     y = self.y[index]
     mask = np.zeros(2, dtype=np.float32)
     mask[int(y)] = 1 # e.g. if y=0, first idx is 1, if y=1, second idx is 1
@@ -299,32 +318,30 @@ def validate(val_loader, model):
     Function to calculate validation accuracy
     '''
     num_correct = 0
-    num_pixels = 0
-    dice_score = 0
+    num_obs = 0
     model.eval() # set model into eval mode
     with torch.no_grad():
         for x, y in val_loader:
             x = x.to("cpu")
             y = y.to("cpu")#.unsqueeze(1)
-            probs = torch.sigmoid(model(x)) # call model to get output, apply sigmoid to get class probs
-            preds = (probs > 0.5).float() # turn regression value (between zero and 1, e.g. "prob of being 1") into predicted 0s and 1s
+            probs = torch.sigmoid(model(x)) # call model to get output, apply sigmoid to get class probs [batch_size, n_classes]
+            preds = np.argmax(probs, axis=1) # turn class probs into 1D predicted class [batch_size] by returning idx of max prob
+            y = np.argmax(y, axis=1) # turn one-hot labels into 1D labels by returning idx where y is 1
             num_correct += len(np.where(preds == y)[0]) #(preds == y).sum()
-            num_pixels += len(preds.flatten()) # torch.numel(preds)
-            dice_score += (2 * (preds * y).sum()) / ((preds + y).sum() + 1e-8)
-    accuracy = num_correct/num_pixels*100
+            num_obs += x.shape[0]
+    accuracy = num_correct/num_obs*100
 
-    return accuracy, dice_score
+    return accuracy
 
 
-class SimpleNN(nn.Module):
+class LinearNN(nn.Module):
   '''
-  Simple feed-foward NN
-    - does not work well at all
+  Simple feed-foward linear NN
     - get rid of extra channels dim in last layer (channels not used in linear, but extra dim for completness)
   '''
 
   def __init__(self, input_dim, output_dim, n_feats): 
-    super(SimpleNN, self).__init__()
+    super(LinearNN, self).__init__()
     self.layers = nn.ModuleList()
     n_feats = [input_dim] + n_feats + [output_dim]
     for i in range(len(n_feats)-1):
@@ -343,27 +360,28 @@ class ConvNN1(nn.Module):
     - based on https://www.kaggle.com/code/purplejester/pytorch-deep-time-series-classification
   '''
 
-  def __init__(self, in_channels, out_channels, conv_channels=[64, 128, 256], k_size=3): 
+  def __init__(self, in_channels, out_classes, channels=[64, 128, 256], in_samps=1000, k_size=3): 
     super(ConvNN1, self).__init__()
 
     self.convs = nn.Sequential(
-        nn.Conv1d(in_channels, conv_channels[0], kernel_size=k_size, padding='same'),
-        nn.Conv1d(conv_channels[0], conv_channels[1], kernel_size=k_size, padding='same'),
-        nn.Conv1d(conv_channels[1], conv_channels[2], kernel_size=k_size, padding='same'))
+        nn.Conv1d(in_channels, channels[0], kernel_size=k_size, padding='same'), # [5, 64, 1000]
+        nn.Conv1d(channels[0], channels[1], kernel_size=k_size, padding='same'), # [5, 128, 1000]
+        nn.Conv1d(channels[1], channels[2], kernel_size=k_size, padding='same')) # [5, 256, 1000]
     
     self.linears = nn.Sequential(
         nn.Dropout(p=0.5),
-        nn.Linear(256, 64),
+        nn.Linear(channels[-1]*in_samps, 5000),
         nn.ReLU(inplace=True),
         nn.Dropout(p=0.5),
-        nn.Linear(64, 64), 
+        nn.Linear(5000, 100), 
         nn.ReLU(inplace=True),
-        nn.Linear(64, 64))
+        nn.Linear(100, out_classes))
 
   def forward(self, x):
     x = self.convs(x) 
     x = x.view(x.size(0), -1)
     x = self.linears(x) 
+    print(x.shape)
     return x
 
 
@@ -375,16 +393,14 @@ class ConvNN2(nn.Module):
 
   def __init__(self, in_channels, out_classes, channels=[64, 128, 256], in_samps=1000, samps=[1024, 512], k_size=3): 
     super(ConvNN2, self).__init__()
-    print(int(channels[-1]*in_samps/4))
-    print(samps[0])
 
     self.convs = nn.Sequential(
-        nn.Conv1d(in_channels, channels[0], kernel_size=k_size, stride=1, padding=1), # [5, 1, 1000]
+        nn.Conv1d(in_channels, channels[0], kernel_size=k_size, stride=1, padding=1), # [5, 64, 1000]
         nn.ReLU(),
-        nn.Conv1d(channels[0], channels[1], kernel_size=k_size, stride=1, padding=1), # [5, 64, 1000]
+        nn.Conv1d(channels[0], channels[1], kernel_size=k_size, stride=1, padding=1), # [5, 128, 1000]
         nn.ReLU(),
-        nn.MaxPool1d(2),                                                              # [5, 64, 500]
-        nn.Conv1d(channels[1], channels[2], kernel_size=k_size, stride=1, padding=1), # [5, 128, 500]
+        nn.MaxPool1d(2),                                                              # [5, 128, 500]
+        nn.Conv1d(channels[1], channels[2], kernel_size=k_size, stride=1, padding=1), # [5, 256, 500]
         nn.ReLU(),
         nn.Conv1d(channels[2], channels[2], kernel_size=k_size, stride=1, padding=1), # [5, 256, 500]
         nn.ReLU(),
@@ -392,7 +408,7 @@ class ConvNN2(nn.Module):
 
     self.linears = nn.Sequential(
         nn.Flatten(), 
-        nn.Linear(int(channels[-1]*in_samps/4), samps[0]), # pool by 2, x2, so samps dim / 4
+        nn.Linear(int(channels[-1]*in_samps/4), samps[0]), # int(channels[-1]*in_samps/4)  pool by 2, x2, so samps dim / 4
         nn.ReLU(),
         nn.Linear(samps[0], samps[1]),
         nn.ReLU(),
@@ -404,3 +420,57 @@ class ConvNN2(nn.Module):
     return x  
 
 
+class ConvNN3(nn.Module):
+  '''
+  Replication of ConvNN2 using modulists to make more flexible
+  Also add dropouts
+  '''
+
+  def __init__(self, in_channels, out_classes, channels=[64, 128, 256], in_samps=500, samps=[1000, 200], k_size=3): 
+    super(ConvNN3, self).__init__()
+
+    
+    channels = [in_channels] + channels + [channels[-1]]
+    self.convs = nn.ModuleList()
+    for i in range(len(channels)-1):
+       self.convs.append(nn.Conv1d(channels[i], channels[i+1], kernel_size=k_size, stride=1, padding=1))
+       self.convs.append(nn.ReLU())
+    self.convs.insert(int(len(self.convs)/2), nn.MaxPool1d(2)) # insert maxpool halfway 
+    self.convs.append(nn.MaxPool1d(2))
+
+    samps = [int(channels[-1]*in_samps/4)] + samps
+    self.linears = nn.ModuleList()
+    self.linears.append(nn.Flatten())
+    for i in range(len(samps)-1):
+       self.linears.append(nn.Linear(samps[i], samps[i+1]))
+       self.linears.append(nn.ReLU())
+       self.linears.append(nn.Dropout(p=0.2))
+    self.linears.append(nn.Linear(samps[-1], out_classes))
+
+  def forward(self, x):
+    for conv in self.convs:
+        x = conv(x)
+    for linear in self.linears:
+        x = linear(x)
+    return x  
+
+class LSTM(nn.Module):
+  '''
+  Uses PyTorch built-in LSTM module
+  '''
+
+  def __init__(self, in_channels, out_classes, channels=[60], in_samps=500, samps=[1000, 200]): 
+    super(LSTM, self).__init__()
+    self.lstm = nn.LSTM(input_size=in_channels, hidden_size=channels[0], num_layers=3, batch_first=True) 
+    self.linears = nn.Sequential(
+            nn.Flatten(),                                # [5, 30000]
+            nn.Linear(channels[-1]*in_samps, samps[0]),
+            nn.Linear(samps[0], samps[1]),
+            nn.Linear(samps[1], out_classes))
+
+  def forward(self, x):
+    x = torch.permute(x, (0,2,1)) # flip channels and samples dimensions to use nn.LSTM
+    x, _ = self.lstm(x)
+    x = torch.permute(x, (0,2,1)) # flip back
+    x = self.linears(x)
+    return x  
