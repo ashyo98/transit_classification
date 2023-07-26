@@ -70,17 +70,17 @@ def stitch_quarters(lc_collection):
         
     return tot_time, tot_flux, tot_flux_err, tot_qual
 
-def collect_curves(n_curves, n_timesteps=1000, downsize_method='interpolate', pct_transit=48.8):
+def collect_curves(n_curves, n_timesteps=1000, downsize_method='interpolate', pct_transit=49):
     """
     Collect raw light curves into flux and time arrays (of shape [n_curves, n_timesteps]).
     Construct corresponding array (of shape [n_curves]) containing labels (1 = transit, 0 = no transit).
     NOTE: downloads take a long time, so I recomend saving the resulting arrays as csv files.
     ----------
     Parameters:
-        n_curves: number of curves to download (will be approximate if percentages don't work out)
-        n_timesteps: number of timesteps to interpolate to (at some point we could also try truncation)
+        n_curves: number of curves to download (will be approximate if percentages don't work out).
+        n_timesteps: number of timesteps to interpolate or truncate to.
         downsize_method: method to force curves to the n_timesteps. Options are 'interpolate' or 'truncate'.
-        pct_transit: percent of returned dataset that contains a transt. Default is 48.8, which is 
+        pct_transit: percent of returned dataset that contains a transt. Default is 49, which is 
                     the overall perentage of the 150,000 available Keplar curves that have transits. 
     ----------
     Returns:
@@ -88,21 +88,20 @@ def collect_curves(n_curves, n_timesteps=1000, downsize_method='interpolate', pc
         all_times: numpy array of shape [n_curves, n_timesteps] containing light curve time values
         all_labels: 1-dimensional array containing correponding transit labels (1 = transit, 0 = no transit)
     """
-
+    # Check inputs
+    if downsize_method not in ['interpolate', 'truncate']:
+       raise ValueError('downsize_method must be "interpolate" or "truncate"')
     # Get IDs of non-transit curves
     data = pd.read_csv('Data/exoplanet_archive_KOIs.csv')
     all_nontransit_ids = data.loc[data['koi_disposition'] == 'FALSE POSITIVE']['kepid'].to_list()
     nontransit_ids = np.random.choice(all_nontransit_ids, size = int(n_curves*(1-pct_transit/100)))
     all_ids = np.copy(nontransit_ids) 
-
     # Get IDs of transit curves 
     all_transit_ids = data.loc[data['koi_disposition'] == 'CONFIRMED']['kepid'].to_list()
     transit_ids = np.random.choice(all_transit_ids, size = int(n_curves*(pct_transit/100)))
     all_ids = np.concatenate((all_ids, transit_ids))
-
     # Randomize id list 
     all_ids = all_ids[np.random.permutation(len(all_ids))]
-
     # Fill array with transit and non-transit curves
     all_curves = np.zeros((len(all_ids), n_timesteps))
     all_times = np.zeros((len(all_ids), n_timesteps))
@@ -137,7 +136,7 @@ def collect_curves(n_curves, n_timesteps=1000, downsize_method='interpolate', pc
     return all_curves, all_times, all_labels
 
 
-def collect_curves_tofiles(n_curves, n_timesteps=1000, downsize_method='interpolate', phase_fold=False, smooth=False, pct_transit=48.8, savepath='../LC_Data'):
+def collect_curves_tofiles(n_curves, n_timesteps=1000, downsize_method='interpolate', phase_fold=False, smooth=False, pct_transit=49, savepath='../LC_Data'):
     """
     Add raw light curves (row-wise) into csv files storing flux, time, and labels (1 = transit, 0 = no transit).
     Every call to this function will add rows to these csv files.
@@ -146,21 +145,26 @@ def collect_curves_tofiles(n_curves, n_timesteps=1000, downsize_method='interpol
           files done't get saved correctly.
     ----------
     Parameters:
-        n_curves: number of curves to download (will be approximate if percentages don't work out)
+        n_curves: number of curves to download (will be approximate if percentages don't work out).
         n_timesteps: number of timesteps to interpolate or truncate to. If "phase fold", number of bins to
                      use to bin folded lightcurve.
         downsize_method: method to force curves to n_timesteps. Options are 'interpolate' or 'truncate'.
         smooth: if True, will smooth returned lightcurves, if False will not.
         phase_fold: if True, will phase fold returned lightcurves, if False will not.
-        pct_transit: percent of returned dataset that contains a transt. Default is 48.8, which is
+        pct_transit: percent of returned dataset that contains a transt. Default is 49, which is
                     the overall perentage of the 150,000 available Keplar curves that have transits.
-        savepath = path in which to create the stored files
+        savepath = path in which to create the stored files.
     ----------
     Generates or adds to the following 3 files:
         savepath/flux_all_[n_timesteps]_[pct_transits].csv: flux values, with each row representing one curve.
         savepath/time_all_[n_timesteps]_[pct_transits].csv: corresponding time values
         savepath/labels_all_[n_timesteps]_[pct_transits].csv: corresponding labels (1 per row)
     """
+    # Check inputs
+    if downsize_method not in ['interpolate', 'truncate']:
+       raise ValueError('downsize_method must be "interpolate" or "truncate"')
+    if not all(item in [phase_fold, smooth] for item in [True, False]):
+       raise ValueError('phase_fold and smooth must be both be either True or False')
     # Get IDs of non-transit curves
     data = pd.read_csv('Data/exoplanet_archive_KOIs.csv')
     all_nontransit_ids = data.loc[data['koi_disposition'] == 'FALSE POSITIVE']['kepid'].to_list()
