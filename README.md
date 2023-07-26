@@ -2,7 +2,7 @@
 Exploration of machine learning methods of detecting transits in Kepler data.
 
 ## Summary
-Never before has the detection and characterization of exoplanets via transit photometry been as promis-
+Never before has the detection and characterization of exoplanets via transit photometry been as promis
 ing and feasible as it is now, due to the increasing breadth and sensitivity of time domain optical surveys.
 Visually identifying transits in stellar lightcurves (flux as a function of time) is impractically time-consuming
 and tedious, but machine learning is uniquely suited to the task of identifying which lightcurves contain
