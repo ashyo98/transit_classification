@@ -253,6 +253,10 @@ from torch.utils.data import Dataset, TensorDataset, DataLoader
 def check_inputs(train_ds, train_loader):
     '''
     Succinctly check that dataloaders are constructed as they should be
+    ----------
+    Parameters:
+        train_ds: instance of PyTorch Dataset class
+        train_loader: corresponding PyTorch data loader
     ''' 
 
     print('Train data:')
@@ -278,6 +282,9 @@ class MyDataset(Dataset):
     self.impute_nans = impute_nans
   
   def __getitem__(self, index):
+    # Check inputs
+    if type(self.x1) != np.ndarray | type(self.y) != np.ndarray:
+       raise TypeError('Inputs must be np.ndarrays')
     # Get lightcurve
     x = torch.from_numpy(self.x1.astype(np.float32))
     x = x[index]
@@ -287,12 +294,6 @@ class MyDataset(Dataset):
     x_preimpute = x.clone().detach()
     if self.impute_nans: 
       x = torch.tensor(pd.Series(x).interpolate(limit_direction='both')) # fill NaNs with means of nieghboring values
-      if torch.any(torch.isnan(x)): 
-        print(f'{index} Initial {x_prenorm[0:100]}') 
-        print(f'{index} After norm {x_preimpute[0:100]}')
-        print(f'{index} SOME STILL NAN After impute {x[0:100]}\n')
-        a=b
-        # print(f'Are all befores nan?: {torch.any(torch.isnan(x_pre))}')
     if self.x2 is None:
         X = np.zeros((1, len(x)), dtype=np.float32) # Add dummy axis since only one channel
         X[0, :] = x 
@@ -303,7 +304,7 @@ class MyDataset(Dataset):
         X[0, :] = x 
         X[1, :] = t
     # Get label
-    y = np.squeeze(torch.from_numpy(self.y))#.type(torch.LongTensor))
+    y = np.squeeze(torch.from_numpy(self.y))
     y = self.y[index]
     mask = np.zeros(2, dtype=np.float32)
     mask[int(y)] = 1 # e.g. if y=0, first idx is 1, if y=1, second idx is 1
@@ -316,6 +317,15 @@ class MyDataset(Dataset):
 def validate(val_loader, model):
     '''
     Function to calculate validation accuracy
+    ----------
+    Parameters:
+        val_loader: PyTorch data loader containing validation data
+        model: trained model
+    ---------
+    Returns:
+        accuracy*100: percentage of total observations predicted correctly
+        recall*100: percentage of positive observations correctly labeled positive
+        F1: harmonic mean of precision and recall
     '''
     TP, TN, FP, FN = 0, 0, 0, 0
     P = 0
@@ -327,25 +337,24 @@ def validate(val_loader, model):
             y = y.to("cpu")#.unsqueeze(1)
             probs = torch.sigmoid(model(x)) # call model to get output, apply sigmoid to get class probs [batch_size, n_classes]
             preds = np.argmax(probs, axis=1) # turn class probs into 1D predicted class [batch_size] by returning idx of max prob
-            y = np.argmax(y, axis=1) # turn one-hot labels into 1D labels by returning idx where y is 1
+            y = np.argmax(y, axis=1) # turn one-hot labels into 1D labels by returning idx where y is 1 
             TP += len(np.where((preds == 1) & (y == 1))[0])
             TN += len(np.where((preds == 0) & (y == 0))[0])
             FP += len(np.where((preds == 1) & (y == 0))[0])
             FN += len(np.where((preds == 0) & (y == 1))[0])
             P += len(np.where(y == 1)[0])
             num_obs += x.shape[0]
-    accuracy = (TP+TN)/num_obs*100
-    # print(TP)
-    # print(P)
-    recall = TP/P*100
+    accuracy = (TP+TN)/num_obs
+    recall = TP/P
+    precision = TP/(TP+FP)
+    F1 = (precision*recall)/(precision + recall)
 
-    return accuracy, recall
+    return accuracy*100, recall*100, F1
 
 
 class LinearNN(nn.Module):
   '''
   Simple feed-foward linear NN
-    - get rid of extra channels dim in last layer (channels not used in linear, but extra dim for completness)
   '''
 
   def __init__(self, input_dim, output_dim, n_feats): 
@@ -362,76 +371,9 @@ class LinearNN(nn.Module):
     return x
 
 
-class ConvNN1(nn.Module):
-  '''
-  1D convolutional NN
-    - based on https://www.kaggle.com/code/purplejester/pytorch-deep-time-series-classification
-  '''
-
-  def __init__(self, in_channels, out_classes, channels=[64, 128, 256], in_samps=1000, k_size=3): 
-    super(ConvNN1, self).__init__()
-
-    self.convs = nn.Sequential(
-        nn.Conv1d(in_channels, channels[0], kernel_size=k_size, padding='same'), # [5, 64, 1000]
-        nn.Conv1d(channels[0], channels[1], kernel_size=k_size, padding='same'), # [5, 128, 1000]
-        nn.Conv1d(channels[1], channels[2], kernel_size=k_size, padding='same')) # [5, 256, 1000]
-    
-    self.linears = nn.Sequential(
-        nn.Dropout(p=0.5),
-        nn.Linear(channels[-1]*in_samps, 5000),
-        nn.ReLU(inplace=True),
-        nn.Dropout(p=0.5),
-        nn.Linear(5000, 100), 
-        nn.ReLU(inplace=True),
-        nn.Linear(100, out_classes))
-
-  def forward(self, x):
-    x = self.convs(x) 
-    x = x.view(x.size(0), -1)
-    x = self.linears(x) 
-    print(x.shape)
-    return x
-
-
-class ConvNN2(nn.Module):
-  '''
-  1D convolutional NN
-  - Based on https://jovian.com/ningboming/time-series-classification-cnn
-  '''
-
-  def __init__(self, in_channels, out_classes, channels=[64, 128, 256], in_samps=1000, samps=[1024, 512], k_size=3): 
-    super(ConvNN2, self).__init__()
-
-    self.convs = nn.Sequential(
-        nn.Conv1d(in_channels, channels[0], kernel_size=k_size, stride=1, padding=1), # [5, 64, 1000]
-        nn.ReLU(),
-        nn.Conv1d(channels[0], channels[1], kernel_size=k_size, stride=1, padding=1), # [5, 128, 1000]
-        nn.ReLU(),
-        nn.MaxPool1d(2),                                                              # [5, 128, 500]
-        nn.Conv1d(channels[1], channels[2], kernel_size=k_size, stride=1, padding=1), # [5, 256, 500]
-        nn.ReLU(),
-        nn.Conv1d(channels[2], channels[2], kernel_size=k_size, stride=1, padding=1), # [5, 256, 500]
-        nn.ReLU(),
-        nn.MaxPool1d(2))                                                              # [5, 256, 250]
-
-    self.linears = nn.Sequential(
-        nn.Flatten(), 
-        nn.Linear(int(channels[-1]*in_samps/4), samps[0]), # int(channels[-1]*in_samps/4)  pool by 2, x2, so samps dim / 4
-        nn.ReLU(),
-        nn.Linear(samps[0], samps[1]),
-        nn.ReLU(),
-        nn.Linear(samps[1], out_classes))
-
-  def forward(self, x):
-    x = self.convs(x) 
-    x = self.linears(x) 
-    return x  
-
-
 class ConvNN3(nn.Module):
   '''
-  Replication of ConvNN2 using modulists to make more flexible
-  Also add dropouts
+  Convolutional NN, using modulists to make more flexible
   '''
 
   def __init__(self, in_channels, out_classes, channels=[64, 128, 256], in_samps=500, samps=[1000, 200], k_size=3): 
@@ -464,14 +406,14 @@ class ConvNN3(nn.Module):
 
 class LSTM(nn.Module):
   '''
-  Uses PyTorch built-in LSTM module
+  NN using PyTorch built-in LSTM module
   '''
 
   def __init__(self, in_channels, out_classes, channels=[60], in_samps=500, samps=[1000, 200]): 
     super(LSTM, self).__init__()
     self.lstm = nn.LSTM(input_size=in_channels, hidden_size=channels[0], num_layers=3, batch_first=True) 
     self.linears = nn.Sequential(
-            nn.Flatten(),                                # [5, 30000]
+            nn.Flatten(),                                
             nn.Linear(channels[-1]*in_samps, samps[0]),
             nn.Linear(samps[0], samps[1]),
             nn.Linear(samps[1], out_classes))
