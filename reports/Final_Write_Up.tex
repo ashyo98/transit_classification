@@ -1,0 +1,453 @@
+\documentclass{article}
+\usepackage{graphicx} % Required for inserting images
+\usepackage{ragged2e}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+\usepackage{natbib}
+\bibliographystyle{abbrvnat}
+\setcitestyle{authoryear,open={(},close={)}} %Citation-related commands
+
+\title{Machine Learning Approaches to the Detection of Exoplanet Transits}
+\author{Anna Zuckerman, Leah Zuckerman, Ashutosh Gandhi, and Andrew Floyd}
+\date{July 2023}
+
+\begin{document}
+
+%Here is a description of the rubric we will be using to evaluate the project update report. Remember the update is an updated and expanded version of the project proposal:
+
+%1. Have you improved, incorporated, or fixed the project proposal based on the feedback received?
+%2. A description of the work and progress based on your project proposal milestones. If you are not on track with the proposal milestones, how do you plan to get back on track?
+%3. Describe some of the challenges you have faced, and how you have overcome those challenges. 
+%4. Are any changes from the original project proposal described and supported based on results or change in strategy? 
+%5. Have you included more detail in your proposed work section, based on your experience with the project to-date? You should have a clearer picture now of what you are doing, so include equations or explanations of theories behind the methodology, models, and implementations.
+
+\maketitle
+
+\section{Introduction and Motivation}
+% Why this problem? Explain both the significance to the field and the significance to you personally.
+
+% Start by discussing your interest or the motivation behind the proposal. What's the project about and why is it important to you and your team? Describe the team, including the roles and specialities of each member.
+
+% Elaborate on the specific field or industry in which you want to apply data mining. This could be in the areas of sports, health, elections, weather, business, etc. Explain why this particular area was chosen and what potential impacts your project could have.
+
+Before the groundbreaking 1992 detection of the planetary system PSR1257 + 12 \citep{Wolszczan1992}, the existence of exoplanets (planets that orbit stars other than our sun) was only hypothetical. In the few decades since, detecting new exoplanetary systems has become vital to understanding the nature and variability of other worlds around distant stars. Characterizing the population of exoplanets is key to understanding the mechanisms which drive the formation and evolution of planetary systems both inside and beyond our solar system, and even to understanding the conditions that may allow life to originate on planetary bodies.
+
+The first step in this endeavor is to observe the stars in our local galaxy, and efficiently determine which host exoplanets. Though several methods exist to accomplish this (for instance, measuring the tiny motions of stars due to the gravitational influence of their planets, or directly imaging the planets in the limited cases when this is possible), the method that has so far produced the most detections is called transit photometry. In this method, astrophysicists measure the flux (amount of light) received from a star over a period of time, and attempt to identify the periodic dips in starlight that signify the presence of a planet orbiting between it's host star and our telescopes on Earth.
+
+Never before has the detection and characterization of exoplanets via transit photometry been as promising and feasible as it is now, due to the increasing breadth and sensitivity of time domain optical surveys. Visually identifying transits in stellar lightcurves (flux as a function of time) is impractically time-consuming and tedious, but machine learning is uniquely suited to the task of identifying which lightcurves contain transits. In this project, we explore and evaluate several supervised machine learning algorithms to classify lightcurves by whether or not they are likely to contain exoplanet transits. Instead of performing a ``vetting" on pre-``triaged" curves (see section \ref{sec:lit_rev}), we work with a full set of Kepler observations (see Section \ref{Data}). To train and evaluate our algorithms, we make use of catalogs of previously-classified stars. 
+
+Extracting accurate transit predictions is key to future studies of population-wide exoplanet system statistics, and for follow-up studies of individual systems and planets. Machine learning approaches to detection via transit photometry will greatly enhance the efficiency and practicality of transit searches, paving the way for novel exoplanet science in the future. 
+
+\section{Literature Review}\label{sec:lit_rev}
+% What has been done before? This does not need to be comprehensive, but it does need to cover at least the current state of the art as expressed in the scientific literature or industry practices. Elucidate how what you are thinking about doing is currently done, and support that with references.
+
+
+For decades, transits were identified manually in lightcurves with tedious visual inspection (e.g. \citealp{Charbonneau2000}). This was slow and labor-intensive. The earliest machine-aided detection methods included Box-Fitting-Least-Squares (BLS) algorithms, which scan curves for box-like signals (e.g. \citealp{Kovac2002}; \citealp{Grziwa2012}), and Bayesian-based analysis techniques, which characterize the likelihood of a signal representing a transit \citep{Aigrain2002}. In recent years, interest in supervised machine-learning techniques has risen. These methods usually rely on previous bodies of human-labeled light curves for the generation of training data. Once trained, they can scan through hundreds of curves and flag promising sources for later visual inspection, dramatically reducing the amount of human labor required. 
+
+
+Past work has explored many different types of supervised machine-learning detection techniques, as well as various methods of pre-processing input data. Most-commonly, pure time-series light curves (flux measurements recorded over a series of timestamps), are input to an algorithm as features describing an observation. Other features can be derived by processing the light curves into the frequency domain, (for example with Fourier transforms or Wavelet transforms), or by phase-folding to fit them within a specified period (see e.g. \citealp{Stumpe2014}; \citealp{Pearson2018}). Often, simple (non-ML) algorithms are used to first ``triage" curves, flagging transit-like signals for further inspection. Machine learning methods are then applied in a ``vetting" phase to predict whether these signals are true transits. Many previously explored algorithms for this task are based on Decision Tree Classification, using simple Decision Trees (e.g. \citealp{Coughlin_2016}; \citealp{Catanzarite_2015}), Random Forests (e.g. \citealp{Armstrong_2015}; \citealp{McCauliff_2015}), or Gradient Boosted Trees (e.g. \citealp{Malik_2021}). Support Vector Machines and K-Nearest-Neighbors Algorithms have also been implemented with good results (e.g. \citealp{Schanche_2018}). 
+
+While these basic classification algorithms do perform well, further work has shown that more sophisticated techniques, such as deep learning methods, may achieve even better results in a more streamlined way. Early deep learning models focused on improving previous ``vetter" models, starting with a convolutional neural network developed by \cite{Shallue_2018}. Other work (e.g. \citealp{Ansdell_2018};  \citealp{Yu_2019}) applied small modifications to this model to incorporate more domain knowledge.  More recently, architectures have been developed to detect likely transits without previous triaging. Two one-dimensional convolutional neural network architectures were developed concurrently by \cite{Zucker2018} and \cite{Pearson2018}. The latter uses phase-folded signals and has been shown to achieve better accuracy on simulated light curves than benchmark BLS and Support-Vector-Machine algorithms (the former was not well-tested against other algorithms). To build on the accuracy achieved with phase-folding, while addressing the issue that it can be difficult to accurately measure the period of a suspected transit,
+\cite{Chintarungruangchai_2019} proposed a two-dimensional convolutional neural network that takes as input a 2D stack of all segments (cycles), as opposed to a single averaged phase-folded curve.  This model is able to achieve good accuracy even when predicted transit periods are significantly inaccurate.
+
+In this project, we attempt similar algorithms to those above, but without an initial triage phase. Our goal is to explore a large range of algorithms, to find a technique that can accurately detect transit signals in a full set of lightcurve observations. 
+
+\section{Model Evaluation Metrics}
+\label{sec:evaluation}
+
+% Here is what we need to add, per the comment on our proposal:
+%"Could expand a bit more on validation of results. For example, is there a cutoff value where you would classify an object as an exoplanet vs not? I would also assume you would run the models multiple times. If a particular result came back positive 90% of the time, and negative the other 10%, how would you classify this? It doesn't need to be exact for now; your results may lead you to a different evaluation goal, but it would be good to know is, as this is essentially your final conclusion."
+
+Our task is a classification problem, so there are a few standard metrics that we can use to evaluate the performance of the models we construct. We are primarily interested in the following: 
+\begin{itemize}
+\item \textbf{Accuracy}: Accuracy is the most straightforward metric and measures the overall correctness of the predictions by calculating the ratio of correctly classified instances to the total number of instances.
+\item \textbf{Precision}: Precision calculates the ratio of true positives (correctly predicted positive instances) to the sum of true positives and false positives (incorrectly predicted positive instances). It indicates how many of the predicted positive instances are actually relevant. High precision indicates that the model is correctly identifying exoplanets and minimizing false positives.
+\item \textbf{Recall} (Sensitivity or True Positive Rate): Recall calculates the ratio of true positives to the sum of true positives and false negatives (missed positive instances). It indicates the proportion of actual positive instances that are correctly identified. High recall indicates that the model effectively captures exoplanets and minimizes false negatives.
+\item \textbf{F1 Score}: The F1 score is the harmonic mean of precision and recall. It provides a single metric that balances both precision and recall. The F1 score is useful to find an optimal balance between precision and recall.
+\end{itemize}
+
+For our purposes, accuracy alone will be inadequate due to the imbalanced nature of our datasets. These datasets typically have a larger number of light curves without any transit signal compared to those with true transits. What's more, while focusing on precision would ensure that the predicted ``planet candidates" are mostly true, this may not be very useful since it could be achieved by making only a few "planet candidate" predictions and ensuring their correctness. Thus, it may result in missing many true transits. Instead, we will prioritize recall for assessing the algorithms' performance in transit detection. Recall measures the proportion of actual transit signals that are correctly identified by the algorithm. In our case, it is preferable to accept a higher number of false positives (incorrectly identified planet candidates) rather than missing potential planet signals. Since the overall purpose of our work is to flag stars for further observation and study, it is more important to catch all true transits than to make sure no false transits are flagged. 
+
+While we will focus on recall, we not that the trade-off between precision and recall, commonly known as the precision-recall trade-off, is likely to be significant. A model with high recall may have a lower precision and vice versa. This trade-off is typically evaluated using the F1 score, which combines precision and recall in a single metric. Thus, we will also consider F1-score as we evaluate our models.
+
+% In the feedback on our project proposal, we were asked "is there a cutoff value where you would classify an object as an exoplanet vs not?". We believe this is referring to a cutoff in probability for probabilistic models. Most of the models we implemented do not return class probabilities explicitly, only class labels. Thus, we will classify a lightcurve as containing a transit if it is classified that way by the algorithm which we find to have the highest performance based on its precision, accuracy, and most importantly recall. For our Neural Network, which does return class probabilities, we simply choose to assign each observation to the class with the highest predicted probability. We could also choose to classify each lightcurve using several different types of models, and use majority voting to determine the most likely classification.
+
+\section{Data}
+\label{Data}
+
+We use stellar lightcurves from the Kepler mission \citep{Ricker2015}. We chose to use data from the Kepler mission because it is one of the largest exoplanet surveys to date,  producing 2708 confirmed detections of transiting exoplanet systems\footnote{As of June 6, 2022, as reported by the NASA Exoplanet Archive (https://exoplanetarchive.ipac.caltech.edu)}. The program ran from 2009 to 2013, observing approximately 150,000 stars in multiple 90-day quarters, at a cadence of either 30 or 60 seconds between observations.  It also used a uniquely high exposure time, and was thus able to observe dimmer, farther away targets than other missions such as the Transiting Exoplanet Survey Satellite (TESS) mission (the other largest exoplanet survey). The mission prioritized Main Sequence stars for which Earth-like planets would be detectable \citep{Batalha_2010}. Kepler lightcurves can be publicly downloaded from the Barbara A. Mikulski Archive for Space Telescopes (MAST) archive (DOI: 10.17909/T9059R). The Kepler Science Processing Pipeline is described in \cite{Jenkins2010}. 
+
+We also use the publicly available NASA Exoplanet Archive database \footnote{https://catcopy.ipac.caltech.edu/dois/doi.php?id=10.26133/NEA4} to create a labeled training  dataset. We cross-reference the target names with the Kepler ID's in this database to label lightcurves in our training set as ``confirmed" positive observations (ie. visual inspection  or follow-up observing has confirmed the presence of a transiting exoplanet in the stellar system), or ``false positive" negative observations (ie. visual inspection  or follow-up observing has shown that the lightcurve does not contain transits). We are careful to construct sets with even class balance, since many more lightcurves in the initial set do not contain transits than do.
+
+\section{Pre-processing}
+Kepler lightcurves can be accessed from the MAST database using the interface provided by the \texttt{LightKurve} package in Python. These curves often contain extended intervals of missing data (due to the telescope entering safe mode, rotating towards Earth, or executing a quarterly roll) as well as individual data points flagged for quality issues (due to cosmic ray hits, reaction wheel zero crossings, impulsive outliers, thruster firings, etc.) \citep{Thompson_2016}. Pre-processing our data to account for these missing values is one key challenge in this project. 
+
+Our first step is to mask out data with quality issues flagged during Kepler data acquisition. In this step, these datapoints are set to NaN, but they will be estimated later. The next pre-processing step must be included to address the fact that Kepler's observing run is divided into quarters, punctuated by rolls of the telescope. To stitch the quarters together, we first fit a linear trend to each of them. Removing this trend allows the quarters to align properly when combined into one continuous lightcurve. Next, we remove medium timescale stellar variability (which can mimic the periodicity of the transit signals or obscure real transit signals). We do this by smoothing our lightcurves with and median filter using a window size of 51 timesteps. This window size was chosen so that variation on the timescale of stellar variability could be removed while allowing transits themselves to persist (see Figure \ref{fig:smoothing}). Finally, we deal with NaN values, which most of our models cannot take as input, by interpolation. Because of the timeseries nature of our data and because we are interested in signals which occur on longer timescales than individual timesteps, we can safely interpolate without worrying about adding spurious signals. 
+
+\begin{figure*}[ht]
+\centering
+\includegraphics[width=0.8\textwidth]{smoothing_example_kep45b.png}
+\caption{An example of smoothing a stellar lightcurve to remove stellar variability using a median filter (Kepler-45).}
+\label{fig:smoothing}
+\end{figure*}
+
+\section{Feature Selection and Engineering}
+
+\subsection{Feature Engineering}
+\label{subsec:feature_engineering}
+
+In an attempt to improve the performance of our models, we generate another dataset with an additional step in pre-processing. Because the timestep information in the original curves is largely meaningless (the change in time between observations is not consistent, and comparison between lightcurves at the same timestep is not meaningful), we construct ``phase-folded" curves, which represent flux as a function of phase within some periodic cycle, as opposed to flux as a function of raw time. To conduct a phase-folding operation, we first remove stellar variability by smoothing using a rolling median filter. Then, we construct a boxed-least squares (BLS) periodogram to determine the period of maximum power for each lightcurve (Figure \ref{fig:periodogram}), and then phase fold the lightcurve on that period (Figure \ref{fig:phase_folded}). This is a common method for dramatically increasing the signal-to-noise of any periodic signal that might be present, though with the limitation that only one periodic signal per lightcurve can be analyzed at a time. We will use both the time-domain and phase folded lightcurves in our subsequent analysis. 
+
+\begin{figure*}[ht]
+\centering
+\includegraphics[width=0.6
+\textwidth]{periodogram_kep69.png}
+\caption{An example of BLS periodogram. The frequency of highest power is used to construct the phase-folded lightcurve.}
+\label{fig:periodogram}
+\end{figure*}
+
+\begin{figure*}[ht]
+\centering
+\includegraphics[width=0.7
+\textwidth]{example_folded_Kep69b.png}
+\caption{An example of a phase-folded lightcurve. Blue points represent folded flux values, and the orange curve represents the binned folded lightcurve. Features should be more meaningful after phase folding because a dip of a few percent at a phase of zero should appear in all positive observation, though some types of stellar variability could also produce this pattern.}
+\label{fig:phase_folded}
+\end{figure*}
+
+\subsection{Feature Selection}
+We also explore the possibility of using feature selection on our dataset. In general, the goal of feature selection is to improve performance, reduce overfitting, and enhance interpretability by focusing on the most informative features while discarding irrelevant or redundant ones. Feature selection is particularly important when dealing with high-dimensional datasets (like ours). We tried out two feature selection methods: Recursive feature selection (RFE) and Filter Method selection (using \texttt{sklearn} selectKBest).
+
+\begin{enumerate}
+    \item \textbf{Recursive feature selection (RFE)}: RFE is an iterative feature selection method that starts with all features and repeatedly removes the least important features based on a model's performance until a desired number of features is reached. Since the number of features in our dataset was very large this method was limited by long runtime. 
+    \item \textbf{Filter Method:} Filter methods pick up the intrinsic properties of the features measured via univariate statistics instead of cross-validation performance. They evaluate the relevance of features based on their individual characteristics, such as correlation with the target variable or statistical tests like ANOVA or chi-square tests. We experimented with the \texttt{SelectKBest} API to reduce the number of features. We used the default scrore\_function of f\_classif. For each feature, the f\_classif method calculates the ANOVA F-statistic, which measures the variation between the class labels (target variable) for that feature. 
+\end{enumerate} 
+
+We attempted to train multiple models (see Section \ref{standard_ML}) using datasets constructed using these feature selection methods. However, it was immediately apparent that they did not improve model performance for any models. On further thought, the fact that feature selection provides no advantage with our data makes sense. Features themselves (the raw time-step information) are not meaningful. The same timesteps will not contain the same information for each lightcurve. Thus, there is no subset of timesteps for which the flux values at those steps will be particularly significant for all curves.  
+
+
+% We believe that we can achieve a greater increase in performance going forward through more sophisticated feature engineering, compared to through tweaking hyperparameters or using a greater volume of training data. One potential pathway we will explore is to fit a model to the phase folded lightcurves and use the fit parameters (period, duration, ephemeris, etc.) as features. Lightcurves with transits will have a strong signal at a phase of zero (in the folded lightcurve), with a depth of of a fraction of a percent and a duration on the order of several hours. We will try both using the \texttt{lightkurve} built-in fitting method, which is faster but only fits for three transit parameters, and also a model called \texttt{Batman} which is more complex and thus more accurate with the trade-off of a longer runtime. 
+
+
+\section{Standard Supervised Learning Methods}
+\label{standard_ML}
+
+\subsection{Initial Attempt without Feature Engineering}
+
+\subsubsection{K-Nearest Neighbors}
+The first algorithm we experiment with is a simple KNN classifier, in order to have a baseline to compare to other classification methods. The KNN algorithm works by storing training data as points in feature space. When a new observation is introduced, we find the k nearest neighbors of that new data point, using a pre-defined distance metric. Distance metrics include variations of Minkowski distance, for example the Euclidean distance (the square root of the sum of the squared differences between the feature values), and the Manhattan distance (the sum of the absolute value in differences). Since we are using a KNN for classification, we take the mode of the labels of the k neighbors to predict the label of the new observation. KNN is considered a “lazy learner” because training involves merely storing the training data, and only when we want to make a prediction is this training data processed in any way. As such, it does not produce a true ``model” that one can examine, and so we look to other models to gain insight into our data. 
+
+We implement our KNN using the Python package \texttt{sklearn}. We first train on full (not phase-folded) lightcurves, after initially applying an interpolation to account for null data values which are not accepted by the \texttt{sklearn} KNN implementation. We split the data into a training, validation, and test set (with a third of the data in each set). We assess the training and validation accuracy using a range of k-values, and find the highest validation accuracy for k=6. Using this value for k, we then train a KNN on the training data and evaluate its performance using a confusion matrix 
+as shown in Figure \ref{fig:KNN_confusion}. We find an overall validation accuracy of 62.7\% and test accuracy of 56.7\%, somewhat better than random guessing but far from perfect. We achieve a validation F1 score of 64.8\% and a test F1 score of only 45.3\%. For our science purposes, we are most interested in correctly identifying all lightcurves which likely contain transits, and we are willing to accept a relatively high rate of false positives if we are able to achieve a low rate of false negatives. Thus, though the KNN has a low overall accuracy, the fact that the (slight) majority of miss-classifications are false positives is encouraging. 
+
+We do not anticipate that fine tuning hyperparameters will be able to significantly improve the performance of our KNN without first implementing more sophisticated feature engineering.
+This is because the KNN measures the distance between observations in Euclidean space by default, and the Euclidean distance between timeseries observations is not particularly meaningful due to the fact that very similar timeseries may be shifted or scaled relative to each other, producing a large distance values. Instead, we retrain the model on our phase-folded lightcurve data, as discussed in Section \ref{sec:with_FE}
+
+
+\begin{figure*}[ht]
+\centering
+\includegraphics[width=0.7\textwidth]{knn_confusion_NE.png}
+\caption{A confusion matrix for our KNN classifier trained using k=6. The classifier is far from perfect, as expected given the application of standard distance metrics.}
+\label{fig:KNN_confusion}
+\end{figure*}
+
+\subsubsection{Random Forest}
+
+In addition to a KNN, we implement a Random Forest (RF) classifier on our light curves. A RF is a collection of Decision Tree (DT) classifiers, each trained on subsamples of the data. To construct each DT, we iteratively split the data by determining the feature for which a split based on its value would result in the most information gain. For each potential split, information gain is calculated as the decrease in entropy between the root node and the post-split nodes:
+
+\begin{equation}
+    \mathrm{entropy_{parent}} = - \sum^{n_{classes}}_{i=1} p_i\mathrm{log}_2(p_i)
+\end{equation}
+\begin{equation}
+    \mathrm{entropy_{children}} = - \sum^{n_{values}}_{j=1}p_j \sum^{n_{classes}}_{i=1} p_i\mathrm{log}_2(p_i)
+\end{equation}
+\begin{equation}
+    \mathrm{info_{split}} = \mathrm{entropy_{parent}} -\mathrm{entropy_{children}}
+\end{equation}
+
+The algorithm continues to select splitting features this way as we move down the tree, creating branches that contain observations of increasing homogeneity. It stops once all nodes contain only one class. Since we prune the trees to reduce over-fitting (see below), new observations are labelled with the mode of the training labels in the leaf node they reach. Once each DT in the RF has formed its class prediction, the final prediction is assigned using the majority vote.
+
+We again use the \texttt{sklearn} Python package to implement this model. We split the data into a training, validation, and test set (with a third of the data in each set). We assess the training and validation accuracy using a range of values for the hyperparameters n\_estimators and max\_depth. We find that for any combination of hyperparameters, the model was subject to a high degree of overfitting, which persisted even when we attempted to avoid overfitting through pruning the tree by reducing the allowed maximum depth of each tree (unless we reduced the depth so much that validation accuracy was reduced to random guessing). We find that the validation accuracy is not sensitive to the choice of max\_depth, and that the maximum validation accuracy occurs with value of n\_estimators = 25.  Using this value, we then train a Random Forest on the training data and evaluate its performance using a confusion matrix. The model has an overall validation accuracy of 66.0\%, again somewhat better than random guessing but far from perfect. Based on the confusion matrix, we notice that the model has a higher propensity to misclassify observations as negative than as positive. This is the opposite of what we would like, so we add a set of class weights to encourage the model to give more weight to positive classifications. Using these weights, we achieve a similar validation accuracy of 67.2\% and test accuracy of 62.7\% and a validation F1 score of 71.8\% and a test F1 score of 62.7\%. We achieve a much more useful bias towards classifying observations as positive rather than negative. This is shown in the new confusion matrix in Figure \ref{fig:RF_confusion_weighted}.
+
+%\begin{figure*}[ht]
+%\centering
+%\includegraphics[width=0.3\textwidth]{RF_confusion.png}
+%\caption{A confusion matrix for our RF classifier trained using n-estimators=6. The classifier is far from perfect, as expected given the timeseries nature of our data.}
+%\label{fig:RF_confusion}
+%\end{figure*}
+
+\begin{figure*}[ht]
+\centering
+\includegraphics[width=0.7\textwidth]{rf_confusion_NE.png}
+\caption{A confusion matrix for our RF classifier trained using n-estimators=25, using class weights to emphasize false positives over false negatives. The classifier does not give high performance.}
+\label{fig:RF_confusion_weighted}
+\end{figure*}
+
+% intially got about the same accuracy without setting class weights, but in order to enforce that we prefer an excess of FP over FN, we weight the positive class more strongly. 
+
+% changinng otehr hyperparams such as max depth did not have a significant impact on performace. 
+
+% however it has a really high training accuracy of 98% so there is definilty overfitting. Howver, to reduce this overfitting by pruning the tree (setting max depth lower) doesn't make much of an effect on training accuracy until like max depth of 2 in which case validation accuracy is 50%.
+
+\subsubsection{Weighted Logistic Regression}
+Next, we attempt to train a Logistic Regression model. Logistic Regression is a simple model that constructs a decision boundary in feature space by finding the logistic function that best splits the data correctly by class label. This best-split is determined by minimizing the log-loss of the predicted and true values.
+
+To construct this model, we again use \texttt{sklearn}'s Python implementation on interpolated light curves. We split the data into a training, validation, and test set (with a third of the data in each set). For this model, we are unable to achieve good performance for any set of hyperparameters, because the model either classifies all observations as positive or all observations as negative. We attempt to add a set of class weights to encourage the model to make both positive and negative classifications, but are unable to find a set of weights that allow for both positive and negative classifications.
+
+
+\subsubsection{Support Vector Machine(SVM) Classification}
+
+Another popular classification model is the Support Vector Machine(SVM). One of the primary reasons for testing SVM on our dataset is the advantage it has on the classification of high dimensional spaces. For our main dataset, we use 1000 features. Using the SVM kernel, high dimension non-linear relationships can be easily discovered in the data. The main objective of the SVM algorithm is to find the optimal hyperplane in an N-dimensional space that can separate the data points in different classes in the feature space. The model tries to maximize the margin between the closest points of different classes. The points that are closest to the hyperplane are called the support vectors. The prediction of the label is solely based on these support vectors and hence this model is very memory efficient. Moreover, unlike in KNN the prediction step is very quick.  
+
+We again use the \texttt{sklearn} python package and divide our dataset into a train/test split of 80/20. We train using K-fold cross-validation. In this technique, the data is divided into K folds or subsets. We train the model k times, each time using one of these folds as a validation set, and training the model on the remaining K-1 folds. Finally, the results from each validation step are averaged to produce a more robust estimate of the model’s performance. The main purpose of cross-validation is to prevent overfitting, which occurs when a model is trained too well on the training data and performs poorly on new, unseen data. By evaluating the model on multiple validation sets, cross-validation provides a more realistic estimate of the model’s generalization performance.
+
+Next, for the identification of the hyperparameters we use the \texttt{GridSearchCV} API provided in the \texttt{sklearn} library. GridsearchCV provides an option to perform an exhaustive search over specified parameter values for an estimator. It tries out all the permutations of the parameters passed to it and does cross-validation training on each permutation. After trying out all possible permutations it returns the parameters with the highest accuracy score. The hyperparameters tuned are C (The regularization parameter), gamma (The kernel coefficient), and kernel (kernel type - rbf, sigmoid, poly). We tried out 5 different values of C and gamma each, along with the 3 different kernel types. We repeat this step with different values of C and gamma parameters based on the result of the previous attempt. The model had an overall cross-validated accuracy of 76\% with the parameter of C as 1000, gamma as 1, and the kernel type as radial basis function(rbf). Even after training the model with the cross-validation technique, there was a small amount of overfitting as the test accuracy was 64\%. The confusion matrix for the train and test is shown in Figure \ref{fig:SVM_confusion}. Although the recall score with this model is close to 1, the low accuracy means the model is likely predicting far too many transits, and will not be able to generalize well.  
+\begin{figure*}[ht]
+\centering
+\includegraphics[width=0.7\textwidth]{SVM_confusion.png}
+\caption{A confusion matrix for our SVM classifier trained using kernel as rbf, C=1000, and gamma=1.}
+\label{fig:SVM_confusion}
+\end{figure*}
+
+\subsubsection{AdaBoost Classifier}
+Since the Random Forest Model does well, we explore other ensemble-based classification models, the first being the AdaBoost algorithm. AdaBoost applies the Boosting ensemble technique. It attempts to build a strong classifier from a number of weak classifiers. It starts with building a model by using a weak estimator. Firstly, a model is built from the training data. Then the second model is built which tries to correct the errors present in the first model. This procedure is continued and models are added until either the complete training data set is predicted correctly or the maximum number of models are added.   
+
+AdaBoost operates on a fundamental principle, utilizing a series of weak learners (models that are slightly better than random guessing, like small decision trees) trained on modified versions of the data. The predictions from these learners are then combined using a weighted majority vote (or sum) to arrive at the final prediction.
+During each boosting iteration, the data undergoes specific modifications by applying individual weights to the training samples. Initially, all weights are set to a default constant (usually 1/number\_of\_samples), leading to the first step where a weak learner is trained on the original data. In each subsequent iteration, the sample weights are adjusted, and the learning algorithm is applied again to the reweighted data.
+At each step, the samples that were incorrectly predicted by the boosted model in the previous iteration have their weights increased, while the weights are decreased for those samples that were predicted correctly. As a result, difficult-to-predict examples gain more influence as the iterations progress. Consequently, each subsequent weak learner is compelled to focus on the examples that were missed by the previous ones in the sequence.
+
+Similar to the process described for SVM in Section 7.1.4, we split our dataset into a train/test ratio of 80/20 and use K-fold cross-validation along with \texttt{GridsearchCV} APIs of \texttt{sklearn} to find the optimal hyperparameter values. The base estimator used is a  DecisionTreeClassifier. We assess the training and validation accuracy using a range of values for the hyperparameters n\_estimators, learning rate, max\_depth for the base estimator, and min\_samples\_leaf for the base estimator. The max\_depth and min\_samples\_leaf are tuned to make sure that the model is not overfitted and these parameters help prune the tree. n\_estimators is the maximum number of estimators at which boosting is terminated and the learning rate indicates the weight applied to each classifier at each boosting iteration. A cross-validation accuracy of 64\% is achieved on the training data with the hyperparameters of base\_estimator as max-depth=20 and min-samples-leaf=7, for the model learning\_rate=0.01 and n\_estimators=60. On the test data, the accuracy is 65.5\% with a recall score of 0.66. The confusion matrix for the train and test is shown in Figure \ref{fig:AdaBoost_confusion}. Overall the model performs similarly to the Random Forest.   
+\begin{figure*}[ht]
+\centering
+\includegraphics[width=0.7\textwidth]{AdaBoost_confusion.png}
+\caption{A confusion matrix for our AdaBoost classifier on both the train and test data.}
+\label{fig:AdaBoost_confusion}
+\end{figure*}
+
+\subsubsection{Gradient Boosting Classification}
+The second type of ensemble boosting algorithm we experiment with is a GradientBoostingClassifier. Similarly to AdaBoost, it utilizes the boosting concept of building weak learners and improving them over each iteration by updating the weights for each model. 
+
+The Algorithm works in the following steps: 
+\begin{enumerate}
+\item \textbf{Initialization:} The process begins by creating a simple model, usually a decision tree with just one node (also called a "stump"). This is the first weak learner. The initial model predicts the target variable but is often inaccurate since it's too simplistic.
+\item \textbf{Residual Calculation:} The next step involves calculating the residuals, which are the differences between the actual target values and the predictions made by the first weak learner. These residuals represent the errors that the first model couldn't capture.
+\item \textbf{Building Weak Learners Iteratively:} In each iteration, a new weak learner (decision tree) is built to predict the residuals from the previous step, not the original target values. The new weak learner is trained to minimize the residual error, thus correcting the mistakes of the previous model. The learning rate is applied to the predictions of each weak learner, controlling the contribution of each model to the final ensemble. A lower learning rate makes learning more conservative.
+\item \textbf{Updating the Ensemble:}
+The predictions of the new weak learner are combined with the predictions from the previous models using a weighted sum or a weighted majority vote. The combined predictions represent an improved estimate of the target variable compared to the previous iterations.
+\item \textbf{Iterative Process:}
+The above steps are repeated for a predefined number of iterations or until a specified performance threshold is reached. With each iteration, the ensemble becomes more accurate, as subsequent weak learners focus on the remaining errors.
+\item \textbf{Final Prediction:} The final prediction of the Gradient Boosting Classifier is the summation of predictions made by all weak learners, taking into account the learning rate and their individual weights.
+\end{enumerate}
+
+Again, we use K-fold cross-validation and \texttt{GridsearchCV} APIs of \texttt{sklearn} to find the optimal hyperparameter values. The base estimator used is a  DecisionTreeClassifier. We assess the training and validation accuracy using a range of values for the hyperparameters n\_estimators, learning rate, max\_features, max\_depth, and min\_samples\_leaf. The max\_depth, max\_features, and min\_samples\_leaf are tuned to make sure that the model is not overfitted and these parameters help prune the tree. n\_estimators is the number of boosting stages to perform and the learning rate shrinks the contribution of each tree by the particular value. A cross-validation accuracy of 64\% is achieved on the training data with the hyperparameters as max-depth=10, n\_estimators=150, max\_features=sqrt, learning\_rate=0.1, and min-samples-leaf=5. On the test data, the accuracy is 72\% with a recall score of 0.73. The confusion matrix for the train and test is shown in Figure \ref{fig:GradientBoost_confusion}.
+\begin{figure*}[ht]
+\centering
+\includegraphics[width=0.7\textwidth]{GradientBoost_confusion.png}
+\caption{A confusion matrix for our GradientBoost classifier on the training and test data}
+\label{fig:GradientBoost_confusion}
+\end{figure*}
+
+\subsection{Standard Supervised Learning Methods: Second Attempt using Feature Engineering}
+\label{sec:with_FE}
+
+After training the above models, we realized that we could keep fine tuning hyperparameters on these models, or choose new types of classifiers to train, but that the underlying limitation was our data itself. Our data is inherently difficult to classify by methods that test the values of each feature (timestep) of a new observation against the same timestep of the observations in the training set, because transits will not appear with the same period and duration in each lightcurve. Thus, we need to implement some feature engineering. We do this by first smoothing our lightcurves using a rolling median filter with window size of 51 timesteps to remove stellar variability, and then phase folding the lightcurves, as described in \ref{subsec:feature_engineering}. After phase folding, we bin folded flux values to remove noise and to ensure that each folded lightcurve has the same number of features.
+
+Next, we present the results of each model after training on this feature-engineered dataset.
+
+
+
+%\begin{figure*}[ht]
+%\centering
+%\includegraphics[width=0.7\textwidth]{example_folded_Kep69b.png}
+%\caption{An example of phase-folded stellar lightcurve (Kepler-69b).}
+%\label{fig:folding}
+%\end{figure*}
+
+\subsubsection{KNN}
+The use of phase-folded curves should allow us to capitalize on the fact that after folding on the period of maximum power lightcurves with strong periodic signals will appear closer together as measured by the chosen distance metric. 
+
+We assess the training and validation accuracy using a range of k-values, and find the
+highest validation accuracy for k=6. Using this value for k, we then train a KNN on the training data and
+evaluate its performance using a confusion matrix as shown in Figure \ref{fig:KNN_confusion_E}. The KNN has an overall validation
+accuracy of 62\% and test accuracy of 68\%, somewhat better than random guessing but far from perfect. We achieve a validation F1 score of 65\% and a test F1 score of 64.7\%. 
+
+\begin{figure*}[ht]
+\centering
+\includegraphics[width=0.7\textwidth]{knn_confusion_NE.png}
+\caption{A confusion matrix for our KNN classifier trained using k=6 on engineered data.}
+\label{fig:KNN_confusion_E}
+\end{figure*}
+
+
+\subsubsection{Random Forest}
+
+We assess the training and validation accuracy using a range of values for the number of estimators, and find the highest accuracy for 36 estimators. Using this value, we then train a Random Forest classifier on the training data and
+evaluate its performance using a confusion matrix as shown in Figure \ref{fig:rf_confusion_E}. The model has an overall validation
+accuracy of 71.3\% and test accuracy of 69.8\%, somewhat better than the results on non-engineered features. We achieve a validation F1 score of 71.3\% and a test F1 score of 65\%. . 
+
+\begin{figure*}[ht]
+\centering
+\includegraphics[width=0.7\textwidth]{rf_confusion_E.png}
+\caption{A confusion matrix for our Random Forest classifier trained using 36 estimators on engineered data.}
+\label{fig:rf_confusion_E}
+\end{figure*}
+
+\subsubsection{Weighted Logistic Regression}
+Using the engineered observations, we are able to achieve somewhat better results from Logistic Regression than we were with the non-engineered features. 
+
+We assess the training and validation accuracy using a range of values for class weights, and find that the results are extremely sensitive to the chosen class weights. We are able to produce both positive and negative classifications when using the engineered dataset, but only for a very precise value of the class weights. We use a negative class weight of 0.52098196, where the positive class weight is 1 minus the negative weight. Using this value, we then train a Logistic Regression classifier on the training data and
+evaluate its performance using a confusion matrix as shown in Figure \ref{fig:lr_confusion_E}. The model has an overall validation
+accuracy of 61.7\% and test accuracy of 58.7\%, again only slightly better than random guessing. We achieve a validation F1 score of 68.1\% and a test F1 score of 61.0\%. The performance is shown in Figure \ref{fig:lr_confusion_E}. 
+
+\begin{figure*}[ht]
+\centering
+\includegraphics[width=0.7\textwidth]{rf_confusion_E.png}
+\caption{A confusion matrix for our Random Forest classifier trained using 36 estimators on engineered data.}
+\label{fig:lr_confusion_E}
+\end{figure*}
+
+\subsubsection{Support Vector Machine (SVM)}
+We next train another SVM model using the phase-folded data. Surprisingly, the results are worse than when the non-phase-folded data is used. With the best hyperparameter values (which again turn out to be C=1000, gamma=1, and an rbf kernel), the cross-validated accuracy and test accuracy are only 61.75\% and 57.5\% respectively. The confusion matrix for the train and test data is shown in Figure \ref{fig:SVM_phase_confusion}. The recall score is 98\% with 90\% of all predictions as labeled "true". 
+\begin{figure*}[ht]
+\centering
+\includegraphics[width=0.7\textwidth]{SVM_phase_confusion.png}
+\caption{A confusion matrix for our SVM classifier trained on the engineered data.}
+\label{fig:SVM_phase_confusion}
+\end{figure*}
+
+\subsubsection{AdaBoost Classifier}
+With the AdaBoost algorithm, the use of phase-folded data does allow us to achieve improved results. After finding the optimal hyperparameters (now base\_estimator as max-depth=10 and min-samples-leaf=5, learning\_rate=0.01 and n\_estimators=70), the test accuracy is 75.50\%  and a recall score is 70\%. The confusion matrix for the train and test is shown in Figure \ref{fig:AdaBoost_phase_confusion}. Clearly, phase-folding is helpful for at least some models. 
+\begin{figure*}[ht]
+\centering
+\includegraphics[width=0.7\textwidth]{AdaBoost_phase_confusion.png}
+\caption{A confusion matrix for our AdaBoost classifier trained on the engineered data.}
+\label{fig:AdaBoost_phase_confusion}
+\end{figure*}
+
+\subsubsection{GradientBoost Classifier}
+As with AdaBoost, the GradientBoost Classifier achieves better results with the phase-folded dataset. With optimal hyperparameters (base\_estimator as max-depth=30, n\_estimators=150, max\_features=sqrt, learning\_rate=0.15, and min-samples-leaf=5), the test accuracy is 77\%  and recall score is 80\%. The confusion matrix for the train and test is shown in Figure \ref{fig:GradientBoost_phase_confusion}. This improvement further confirms that phase-folding can significantly improve model accuracy. 
+
+\begin{figure*}[ht]
+\centering
+\includegraphics[width=0.7\textwidth]{GradientBoost_phase_confusion.png}
+\caption{A confusion matrix for our GradientBoost classifier trained on the engineered data.}
+\label{fig:GradientBoost_phase_confusion}
+\end{figure*}
+
+\section{Deep Learning}
+
+\subsection{General Structure of a Neural Network}
+In addition to the standard supervised learning methods discussed above, we have also made progress implementing deep learning networks for our classification goal. In general, a Neural Network is a network of nodes, or ``neurons," that learn how to weight various learned features of an input dataset to produce the correct output. These nodes are arranged into layers, such that we can think of the nodes of each layer as the number of ``features" that layer contains. Each node in a given layer is connected to some or all of the nodes of the previous one through a series of weighting functions. Layers can also contain ``bias" nodes that are not connected to the previous layers. Different types of networks ``pass" the data through the layers in different ways (see \ref{subsec:types}), but the end result is a set of predicted class probabilities. The predicted label is assigned as the most probable class. 
+
+To train a network, we give the model a cost function, C, to quantify the difference between its predictions and the true labels. Common cost functions make use of the Mean Squared Error or Cross Entropy Loss of the predictions and the labels. To train a network, we use a process called back-propagation to adjust the weights and biases to minimize the cost function. This works by calculating the gradient of the loss function with respect to each weight and bias term. Using the chain rule, we write this as:
+
+\begin{equation}
+    \frac{dC}{dw_i} = \frac{dC}{d\hat{y}} \times \frac{d\hat{y}}{dw_i}
+\end{equation}
+\begin{equation}
+    \frac{dC}{db_i} = \frac{dC}{d\hat{y}} \times \frac{d\hat{y}}{db_i}
+\end{equation}
+
+\noindent Then, we update each weight and bias term using gradient descent, with a learning rate, $\alpha$, added to set how much adjustment is done (e.g. how fast the model learns):
+
+\begin{equation}
+    w_i = w_i - (\alpha \times \frac{dC}{dw_i})
+\end{equation}
+\begin{equation}
+    b_i = b_i - (\alpha \times \frac{dC}{db_i})
+\end{equation}
+
+\subsection{Network Architectures}
+\label{subsec:types}
+Using the \texttt{PyTorch} neural network library, we have attempted four neural network (NN) architectures: a simple linear feed-forward (fully-connected) network, a 1D convolutional network with a single feature channel, a 1D convolutional network with two feature channels, and a model using the LSTM sub-structure. We experiment with training on both full time-series lightcurves and on phase-folded lightcurves. For the 2-channel model, we use phase-folded lightcurves and their corresponding phase-steps.
+
+A linear network is defined by the use of ``linear" layers, which connect inputs and outputs via simple matrix multiplications. To transform the outputs of layer $i$ into the inputs of layer $i+1$, we first perform multiplication by the matrix of weights, $\theta_i$, where each weight in $\theta_i$ is associated with a connection between a node in layer $i-1$ and a node in layer $i$. Then, we add a bias term, b, (if desired) and apply an activation function, g. Using the sigmoid function as the activation function (a common choice), this looks like:
+
+\begin{equation}
+  \vec x_{i+1} = g(\mathbf{\theta} \cdot \vec x_i + b)
+\end{equation}
+\begin{equation}
+  \mathrm{with} \;g(x) = \frac{1}{1+e^{-x}}
+\end{equation}
+
+
+A convolutional network is defined by the use of convolutional layers (often along with linear layers). In a convolutional layer,  the input is transformed into the output via convolution with a kernel. For discrete vectors of features (as is the case in a NN), this convolution is identical to a cross-correlation, so the full computation can be written as:
+
+\begin{equation}
+  \vec x_{i+1} = g(b + \sum_{k}^{n_{nodes - 1}} w_{k,i} \ast x_{k,i-1})
+\end{equation}
+
+\noindent Here, the weights, $w_i$, represent the elements of the convolution kernel. It is these weights (along with any bias terms) that are learned as the model is trained.
+
+Many other layer types exist, and a collection of layers called a ``Long Short-Term Memory" (LSTM) cell is often used when working with sequential data. An LSTM model is a type of recurrent neural network (RNN). In  an RNN, information about previous steps is stored in the ``hidden state" associated with each layer. The hidden state for layer $i$ is a function of hidden state of layer $i-1$ , as well as the inputs to layer $i$. Then, the output of layer $i$ is calculated by multiplying the layer's weight matrix by the value of its hidden state. An LSTM adds another input to each layer: a ``long-term memory" state. The LSTM cell contains three ``gates" that control what information is 1) allowed into the cell, 2) passed into the long-term memory state, and 3) passed into the hidden (short-term memory) state. The ``input gate" generally consists of a ``filter" vector generated by passing the current input and hidden state through a sigmiod function. When multiplied by the inputs, the filter transforms them to the range 0 to 1, so that those that are now 0 are discarded. The ``forget" gate contains a similar filter created with a different sigmiod function. The incoming long-term state is multiplied by this vector. Finally, in the ``output" gate, another filter is created with yet another sigmoid function, which controls output into the new hidden sate by multiplying the incoming hidden state. As the model is trained, it learns the weights of the sigmoid functions in the three gates that allow the most important information to be stored in the short and long term memory.
+
+
+\subsection{Network Performance}
+
+We use a linear architecture trained on the original light curves as a baseline method, and, as might be expected, this has yielded very poor results. After experimenting with various structure hyperparameters (e.g. modifying the number of hidden layers and the number of nodes per hidden layer), the best model achieved an overall accuracy of only around 45\% (worse than random guessing). Even worse, with a recall of $\sim$29\%, it is clear that we are missing an intolerably high number of true positives. Assuming these terrible results might be due to excessive noise still being present in the light curves even after pre-processing, we train a second linear model on phase-folded curves. Unfortunately, while the results improve slightly, we are not able to find any combination of structure parameters that achieve more than $\sim$59\% accuracy, $\sim$36\% recall and an F1-score of $\sim$23\%. 
+
+The inability to pick out temporal trends on the correct scale, even with phase-folded data, points to a need for a model that learns from the ``spatial" (in this case sequential) information stored in the data. To this end, we expect that a convolutional network will perform much better. Surprisingly, we are not able to achieve any significant improvement in accuracy (the best being $\sim$57\%), and only a slight increase in recall ($\sim$54\%) and F1-score ($\sim$28\%) with a 1-channel convlutional network. This may be because a large amount of information in the light curves is contained not just in the sequence of the flux values (value 1, then value 2, then value 3, etc), but also in the phase-step information associated with them (value 1 at time 1, value 2 at time 2, value 3 at time 3, etc.)  
+
+To make use the phase-step information, we add a second channel to the convlutional network, so that both flux and phase arrays can be passed in. While overall accuracy and F1-score are still objectively quite poor (around 62\% and 36\%, respectively), these are significantly better than for previous networks. More importantly, the recall score jumps to around 99\%, which is quite encouraging given our desire for a low false negative rate. As a final attempt to improve on overal performance, we look to network structures specifically designed for time-series classification. Specifically, we integrate PyTorch's LSTM module, which performs a Long Short-Term Memory operation on input data. Oddly, while recall rises to almost 100\%, total accuracy drops to $\sim$49\%, and F1 to $\sim$33\%.
+
+Overall, while the LSTM model achieves the best recall, the extremely low accuracy likely means it is predicting significantly too many transits. Thus, the 2-channel CNN seems to be the “best” model, as it has much better accuracy and still very high recall. However, while we do care most about avoiding false negatives, we cannot reasonably argue that near perfect recall ``outweighs" the fact that the overall accuracy is only around 62\%. Thus, we conclude that none of the neural network models do better than some of the simpler algorithms, so in selecting our best model we turn back to those.  
+
+\section{Final Model Selection}
+Our best performance was achieved using a Gradient Boost Classifier, with 150 estimators, a maximum depth of 30, a minimum of 5 samples per leaf node, and a maximum number of features considered in a split taken as the square root of the total number of features. Trained on phase-folded light curves, we were able to achieve an accuracy of 77\%, recall of 79\%, and F1 score of 77\%. Even though this is not very high performance, of the models we trained we select this is are best performing classifier.
+
+%\section{Challenges}
+%We have faced several challenges so far which we have had to overcome. Firstly, though one of us was already somewhat familiar with our data, we did not fully anticipate the amount of time needed to bring the group up to a full understanding of the nuances of the dataset, and in particular the types of feature engineering needed to produce good results. We first naively trained our algorithms on the lightcurves themselves, and only later realized that when features are the flux values at each timestep, direct comparison between features of each lightcurve is not particularly meaningful. Thus, one challenge was our delayed realization of the necessity of feature engineering for our dataset. 
+
+%Another challenge we have encountered is the download speed of our data. Querying for one lightcurve can take up to 30 seconds, which means we can spend several hours downloading lightcurves. We have attempted to mitigate this through saving lightcurves to a csv file after each download, but often even this strategy is imperfect because the \texttt{Lightkurve} query interface drops the connection after one or two hundred lightcurves, and because the downloading must be repeated each time we wish to change the pre-processing steps. So far, we have only been able to generate datasets of at most ~200 observations. This is a very small training set for most algorithms, and we are working on ways to ensure more reliable \texttt{LightKurve} interface connections.
+
+%In addition, we have faced the inherent difficulty in collaborating remotely and asynchronously. We have addressed this challenge through utilizing various methods of virtual communication and code sharing, such as Discord, github, and Overleaf, but have nonetheless found that this type of collaboration is slower and more difficult that in-person work.
+
+
+
+% \section{Next Steps}
+% \subsection{Feature Engineering}
+% We believe that we can achieve a greater increase in performance going forward through more sophisticated feature engineering, compared to through tweaking hyperparameters or using a greater volume of training data. One potential pathway we will explore is to fit a model to the phase folded lightcurves and use the fit parameters (period, duration, ephemeris, etc.) as features. Lightcurves with transits will have a strong signal at a phase of zero (in the folded lightcurve), with a depth of of a fraction of a percent and a duration on the order of several hours. We will try both using the \texttt{lightkurve} built-in fitting method, which is faster but only fits for three transit parameters, and also a model called \texttt{Batman} which is more complex and thus more accurate with the trade-off of a longer runtime.  
+
+% Time permitting, we may also choose to try other types of feature engineering, such as Dynamic Time Warping or Wavelet Analysis.
+
+% \subsection{Additional Algorithms}
+% If we have time, we will also explore new types of machine learning algorithms. The are several methods which are outside the scope of the class lectures, but which are especially well-suited to time-series data, though not necessarily for periodic data. We would like to attempt to implement a few more complex algorithms. If we are not able to achieve this before the end of the course, this will be a prioirity for future work.
+
+% \subsection{Model Selection}
+% Our final step, once we have finished exploring more complex feature engineering and perhaps evaluating additional machine learning algorithms, will be to make a final determination of the best model and hyperparameters, as well as the best set of features to train on. We will base this determination on the model evaluation metrics described in Section \ref{sec:evaluation}, and especially recall. In the above sections, we have shown model performance with a confusion matrix, and we will use the true positive, false positive, true negative, and false negative rates as shown in these matrices to calculate the evaluation metrics. 
+
+% \subsection{Methodology}
+
+% The wide-range of previously explored algorithms for transit detection makes us excited to cast our net wide as well. First, we will test traditional machine learning algorithms such as K-Nearest-Neighbors, Random Forests, Logistic Regression, and Support Vector Machines. We will apply various transformations to our data before applying these algorithms, namely perform phase-folding and construction of periodograms. We will test algorithms trained on raw, phase-folded, and periodogram data, and present various evaluation metrics (see Section \ref{Evaluation}) for each model and training set. 
+
+% In addition to traditional supervised algorithms, we will develop a convolutional neural network model using the PyTorch deep learning framework. The model architecture will be based on that of \cite{Pearson2018}. Ideally, after first constructing a baseline model taking as input the pure light curve data, we will (following \citealp{Pearson2018}) also construct one that intakes Wavelet-transformed data. If this is successful, a model with multiple input channels (pure and transformed light curves) may be attempted. 
+
+% \section{Project Planning}
+
+% \subsection{Collaboration}
+
+% Our team consists of four members, and as a whole we are well suited to this project. Anna Zuckerman is an astrophysics PhD student with a background in exoplanet photometry, and thus will be well-placed to provide domain knowledge and an understanding of the opportunities provided by the data, as well as its complexities and limitations. She will also guide the knowledge mining goals of the project. Ashutosh Gandhi is a computer science graduate student with both academic and industry experience in machine learning, which will allow him to play a key role in the technical and software development aspects of the project. Andrew Floyd has a computer science and engineering background, with wide ranging experiences and interests. His experience in many types of data mining will be important to developing the methodology for our project and evaluating our models and results. Leah Zuckerman is an astrophysics PhD student, and though her research focus has never included exoplanets she has the unique experience of applying machine learning algorithms to various astrophysical problems. Thus she will play a key role in integrating the scientific and technical aspects of this project.
+
+% This project will also benefit from advice and networking with experts in the field. Leah Zuckerman works closely with a Post-Doctoral researcher in Machine Learning at the National Solar Observatory, who will be aptly placed to provide guidance on machine learning best practices. Leah and Anna Zuckerman also have a strong network of peers in the Astrophysics PhD program who are experts in explanatory science. These students may provide feedback on the scientific validity of our methods and results.  
+
+
+\section{Conclusions and Future Work}
+
+The groundbreaking detection of the exoplanetary system PSR1257 + 12 in 1992 marked a significant milestone in understanding planets outside our solar system. Since then, the detection of new exoplanetary systems has become crucial for studying the formation and evolution of planetary systems and investigating conditions for life. Recent advancements in time-domain optical surveys have made detections through transit photometry even more promising. In this project, we aimed to explore machine learning algorithms to automate the identification of exoplanet transits in stellar lightcurves, combining the frontiers of exoplanet science and the power of machine learning.
+
+Our work spanned a wide range of algorithms and involved the application of these methods to various transformations of our lightcurve datasets. While some models did better than others, no model was able to achieve a high accuracy score while maintaining a high recall. Thus, our main takeaway is that classification of lightcurves is a challenging task. Transit signals from small planets are often difficult to extract from noise in flux measurements, and stellar variability can mimic periodic transit signals. What's more, lightcurves by nature make up a very high dimensional dataset, requiring complex methods of feature engineering to extract meaningful information. We believe that if we were to take this project further, the most impactful next step would be to explore new methods of feature engineering beyond those we worked with here. For example, we could
+fit transit models and extract transit parameters as features, or transform lightcurves using Dynamic Time Warping or Wavelet Analysis. We could also experiment with new classification methods designed specifically for time-series data, for example, the AR(I)MA (Autoregressive (Integrated) Moving Average) algorithm or other time-series neural network architectures. 
+
+
+
+
+ % Another interesting knowledge extraction task to which our dataset would be amenable to is an anomaly search. Lightcurves contain a wealth of information not only about the presence or absence of exoplanets, but also about the star itself. Unusual lightcurves have led to breakthrough studies of processes like stellar flaring in the past, or have even been proposed as a potential technosignature in the Search for Extraterrestrial Intelligence (SETI) \citep[e.g.][]{kipping2016,arnold2005}. Thus, after the semester is over a possible extension of our project would be to serach for anomalous lightcurves
+
+ \section{Code Availability}
+ All code for this project can be found at \href{https://github.com/annazuckerman/transit_classification}{github.com/annazuckerman/transit\_classification}.
+ 
+
+\bibliography{works_cited}{}
+\bibliographystyle{aasjournal}
+
+\end{document}
+

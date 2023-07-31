@@ -1,0 +1,145 @@
+\documentclass{article}
+\usepackage{graphicx} % Required for inserting images
+\usepackage{ragged2e}
+\usepackage[margin=1in]{geometry}
+\usepackage{natbib}
+\bibliographystyle{abbrvnat}
+\setcitestyle{authoryear,open={(},close={)}} %Citation-related commands
+
+\title{Project Proposal: A Machine Learning Algorithm to Detect Exoplanet Transits}
+\author{Anna Zuckerman, Leah Zuckerman, Ashutosh Gandhi, and Andrew Floyd}
+\date{June 2023}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction and Motivation}
+% Why this problem? Explain both the significance to the field and the significance to you personally.
+
+% Start by discussing your interest or the motivation behind the proposal. What's the project about and why is it important to you and your team? Describe the team, including the roles and specialities of each member.
+
+% Elaborate on the specific field or industry in which you want to apply data mining. This could be in the areas of sports, health, elections, weather, business, etc. Explain why this particular area was chosen and what potential impacts your project could have.
+
+Before the groundbreaking 1992 detection of the planetary system PSR1257 + 12 \citep{Wolszczan1992}, the existence of exoplanets (planets that orbit stars other than our sun) was only hypothesized. In the few decades since, detecting new exoplanetary systems has become vital to understanding the nature and variability of other worlds around distant stars. Characterizing the population of exoplanets is key to understanding the mechanisms which drive the formation and evolution of planetary systems both inside and beyond our solar system, and even to understanding the conditions that may allow life to originate on planetary bodies.
+
+The first step in this endeavor is to observe the stars in our local galaxy, and efficiently determine which host exoplanets. Though several methods exist to accomplish this (for instance, measuring the tiny motions of stars due to the gravitational influence of their planets, or directly imaging the planets in the limited cases when this is possible), the method that has so far produced the most detections is called transit photometry. In this method, astrophysicists measure the flux (amount of light) received from a star over a period of time, and attempt to identify the periodic dips in starlight that signify the presence of a planet orbiting between it's host star and our telescopes at Earth.
+
+Never before has the detection and characterization of exoplanets via transit photometry been as promising and feasible as it is now, due to the increasing breadth and sensitivity of time domain optical surveys. Visually identifying transits in stellar lightcurves (flux as a function of time) is impractically time-consuming and tedious, but machine learning is uniquely suited to the task of identifying which lightcurves contain transits. 
+In this project, we propose to explore and evaluate several machine learning algorithms to classify stellar lightcurves as containing or not containing exoplanet transits. 
+
+This project is also of personal interest our group because of our fascination both with probing the open questions of astrophysics and with exploring the power and applicability of machine learning to address scientific problems. Thus, we choose this project because it will allow us to learn about the forefront of exoplanet detection science while investigating the world of machine learning.
+
+\section{Literature Review}
+% What has been done before? This does not need to be comprehensive, but it does need to cover at least the current state of the art as expressed in the scientific literature or industry practices. Elucidate how what you are thinking about doing is currently done, and support that with references.
+
+
+For decades, transits were identified manually in source light-curves with tedious visual inspection (e.g. \citealp{Charbonneau2000}), which is slow and labor-intensive. The earliest machine-aided detection methods included Box-Fitting-Least-Squares (BLS) algorithms, which scan curves for box-like signals (e.g. \citealp{Kovac2002}; \citealp{Grziwa2012}), and Bayesian-based analysis to characterize the likelihood of a signal representing a transit \citep{Aigrain2002}. In recent years, interest in supervised machine-learning techniques has risen. These methods usually rely on the previous bodies of human-labeled (sometimes machine-aided) light curves for the generation of training data. Once trained, they can scan through hundreds of curves and flag promising sources for later visual inspection, dramatically reducing the amount of human labor required. 
+
+
+Past work has explored many different types of supervised machine-learning detection techniques, and varying methods of pre-processing input data. Most-commonly, pure time-series light curves (flux measurements recorded over a series of timestamps), are input to an algorithm as features describing an observation. Other features can be derived from processing the light curves into the frequency domain, for example with Fourier transforms, Wavelet transforms, or phase-folding (see e.g. \citealp{Stumpe2014}; \citealp{Pearson2018}). Often, simple (non-ML) algorithms are used to first ``triage" curves, flagging transit-like signals for further inspection. Machine learning methods are then applied in a ``vetting" phase to predict whether these signals are true transits. Many previously explored algorithms for this task are based on Decision Tree Classification, using simple Decision Trees (e.g. \citealp{Coughlin_2016}; \citealp{Catanzarite_2015}), Random Forests (e.g. \citealp{Armstrong_2015}; \citealp{McCauliff_2015}), or Gradient Boosted Trees (e.g. \citealp{Malik_2021}). Support Vector Machines and K-Nearest-Neighbors Algorithms have also been implemented with good results (e.g. \citealp{Schanche_2018}). All of these algorithms can achieve good accuracy. 
+
+
+While these basic classification algorithms do perform well, further work has shown that more sophisticated techniques, such as deep learning methods, may achieve even better results in a more streamlined way. Early deep learning models focused on improving previous ``vetter" models, starting with a convolutional neural network developed by \cite{Shallue_2018}. Other work (e.g. \citealp{Ansdell_2018};  \citealp{Yu_2019}) applied small modifications to this model to incorporate more domain knowledge.  More recently, architectures have been developed to detect likely transits without previous triaging. Two one-dimensional convolutional neural network architectures were developed concurrently by \cite{Zucker2018} and \cite{Pearson2018}. The latter uses phase-folded signals and has been shown to achieve better accuracy on simulated light curves than benchmark BLS and Support-Vector-Machine algorithms (the former was not well-tested against other algorithms). To build on the accuracy achieved with phase-folding, while addressing the issue that it can be difficult to accurately measure the period of a suspected transit,
+\cite{Chintarungruangchai_2019} proposed a two-dimensional convolutional neural network that takes as input a 2D stack of all segments (cycles), as opposed to a single averaged phase-folded curve.  This model is able to achieve good accuracy even when predicted transit periods are significantly inaccurate. 
+
+
+\section{Proposed Work}
+% What do you plan to do?
+
+\subsection{Data and Pre-processing}
+\label{Data}
+% Explain where you will be getting your data. This could be from games/teams/players, COVID-19 stats, Twitter, reviews, etc. Also, discuss why these particular data sources were chosen and how reliable they are. Also address the issue of data availability.
+
+We will use stellar lightcurves from the Kepler mission \citep{Ricker2015}. We chose to use data from the Kepler mission because it is one of the largest exoplanet surveys to date,  producing 2708 confirmed detections of transiting exoplanet systems\footnote{As of June 6, 2022, as reported by the NASA Exoplanet Archive (https://exoplanetarchive.ipac.caltech.edu)}. The program ran from 2009 to 2013, observing approximately 150,000 stars in multiple 90-day quarters, at a cadence of either 30 or 60 seconds between observations.  It also used a uniquely high exposure time, and was thus able to observe dimmer, farther away targets than other missions such as the Transiting Exoplanet Survey Satellite (TESS) mission, the other largest exoplanet survey. The mission prioritized Main Sequence stars for which Earth-like planets would be detectable \citep{Batalha_2010}. Lightcurves can be publicly downloaded from the Barbara A. Mikulski Archive for Space Telescopes (MAST) archive (DOI: 10.17909/T9059R). The Kepler Science Processing Pipeline is described in \cite{Jenkins2010}. Lightcurves comprise measured flux as a function of time. They often contain extended intervals of missing data (due to the telescope entering safe mode, rotating towards Earth, or executing a quarterly roll) as well as individual data points flagged for quality issues (due to cosmic ray hits, reaction wheel zero crossings, impulsive outliers, thruster firings, etc.) \citep{Thompson_2016} which will be one challenge for this project. 
+
+Kepler lightcurves are publicly available online through the MAST database, and can be accessed  using the interface provided by the \texttt{LightKurve} package in Python. Kepler's observing run is divided into quarters, punctuated by rolls of the telescope. We will fit and remove a linear trend from each quarter, and stitch the quarters into one continuous lightcurve. We will then mask out data with quality issues flagged during Kepler data acquisition. 
+
+We will also use the publicly available NASA Exoplanet Archive database \footnote{https://catcopy.ipac.caltech.edu/dois/doi.php?id=10.26133/NEA4} to create a labeled training  dataset. We will cross-reference the target names with the Kepler ID's in this database to label lightcurves in our training set as "confirmed" positive observations (ie. visual inspection  or follow-up observing has confirmed the presence of a transiting exoplanet in the stellar system), or "false positive" negative observations (ie. visual inspection  or follow-up observing has shown that the lightcurve does not contain transits). We will have to be careful about class imbalance, because many more lightcurves do not contain transits than do.
+
+
+\subsection{Knowledge Extraction}
+\label{Knowledge_Extraction}
+% Explain what type of knowledge you hope to extract from the data. This could be frequent patterns, key factors, trends, anomalies, etc. Talk about the potential benefits and insights this knowledge could provide.
+
+Our task is essentially one of classification. We plan to classify our lightcurves by whether or not they are likely to contain exoplanet transits. Instead of performing a "vetting" on pre-"triaged" curves (see section \ref{Knowledge_Extraction}), we will work with a full set of Kepler observations. Extracting accurate transit predictions is key to future studies of population-wide exoplanet system statistics, and for follow-up studies of individual systems and planets. 
+
+Another interesting knowledge extraction task to which our dataset would be amenable to is an anomaly search. Lightcurves contain a wealth of information not only about the presence or absence of exoplanets, but also about the star itself. Unusual lightcurves have led to breakthrough studies of processes like stellar flaring in the past, or have even been proposed as a potential technosignature in the Search for Extraterrestrial Intelligence (SETI) \citep[e.g.][]{kipping2016,arnold2005}. Thus, a possible extension of our project would be to serach for anomalous lightcurves.
+
+
+\subsection{Methodology}
+% Discuss the steps you plan to take in this project. This could include understanding the problem and data, preprocessing the data, managing the data, building models, and evaluating the results. This will also involve discussion of any existing tools you plan to use.
+
+The wide-range of previously explored algorithms for transit detection makes us excited to cast our net wide as well. First, we will test traditional machine learning algorithms such as K-Nearest-Neighbors, Random Forests, Logistic Regression, and Support Vector Machines. We will apply various transformations to our data before applying these algorithms, namely perform phase-folding and construction of periodograms. We will test algorithms trained on raw, phase-folded, and periodogram data, and present various evaluation metrics (see Section \ref{Evaluation}) for each model and training set. 
+
+In addition to traditional supervised algorithms, we will develop a convolutional neural network model using the PyTorch deep learning framework. The model architecture will be based on that of \cite{Pearson2018}. Ideally, after first constructing a baseline model taking as input the pure light curve data, we will (following \citealp{Pearson2018}) also construct one that intakes Wavelet-transformed data. If this is successful, a model with multiple input channels (pure and transformed light curves) may be attempted. 
+
+\section{Evaluation}
+\label{Evaluation}
+% What metrics will you use to gauge the insight or actionable information you are gaining? How do you plan to claim success in making useful insights or actionable information?
+
+Being a classification problem we would primarily be interested in the following evaluation metrics: 
+\begin{itemize}
+\item \textbf{Accuracy}: Accuracy is the most straightforward metric and measures the overall correctness of the predictions by calculating the ratio of correctly classified instances to the total number of instances.
+\item \textbf{Precision}: Precision calculates the ratio of true positives (correctly predicted positive instances) to the sum of true positives and false positives (incorrectly predicted positive instances). It indicates how many of the predicted positive instances are actually relevant. High precision indicates that the model is correctly identifying exoplanets and minimizing false positives.
+\item \textbf{Recall} (Sensitivity or True Positive Rate): Recall calculates the ratio of true positives to the sum of true positives and false negatives (missed positive instances). It indicates the proportion of actual positive instances that are correctly identified. High recall indicates that the model effectively captures exoplanets and minimizes false negatives.
+\item \textbf{F1 Score}: The F1 score is the harmonic mean of precision and recall. It provides a single metric that balances both precision and recall. The F1 score is useful to find an optimal balance between precision and recall.
+\end{itemize}
+
+The accuracy metric is inadequate for evaluating the performance of a planet detection algorithm due to the imbalanced nature of most exoplanet detection datasets. These datasets typically have a larger number of light curves without any planet signal compared to those with a planet. While high precision ensures that the predicted "planet candidates" are mostly true, it is not a very informative metric. This is because achieving high precision can be done by making only a few "planet candidate" predictions and ensuring their correctness. However, this approach may result in missing many potential planet candidates.
+
+Instead, prioritizing recall is more important for assessing the algorithm's performance in planet detection. Recall measures the proportion of actual planet signals that are correctly identified by the algorithm. In our case, it is preferable to accept a higher number of false positives (incorrectly identified planet candidates) rather than missing potential planet signals.
+
+The trade-off between precision and recall, commonly known as the precision-recall trade-off, is significant. A model with high recall may have a lower precision and vice versa. This trade-off is typically evaluated using the F1 score, which combines precision and recall in a single metric.
+
+
+\section{Project Planning}
+
+\subsection{Collaboration}
+% Each team member should have a clearly defined role and responsibilities. Describe these roles and discuss how the team will communicate and coordinate their efforts.
+
+% Highlight the importance of networking and seeking advice from peers, mentors, and experts in the field. Explain how these interactions can benefit the project and how you plan to incorporate feedback into your work.
+
+Our team consists of four members, and as a whole we are well suited to this project. Anna Zuckerman is an astrophysics PhD student with a background in exoplanet photometry, and thus will be well-placed to provide domain knowledge and an understanding of the opportunities provided by the data, as well as its complexities and limitations. She will also guide the knowledge mining goals of the project. Ashutosh Gandhi is a computer science graduate student with both academic and industry experience in machine learning, which will allow him to play a key role in the technical and software development aspects of the project. Andrew Floyd has a computer science and engineering background, with wide ranging experiences and interests. His experience in many types of data mining will be important to developing the methodology for our project and evaluating our models and results. Leah Zuckerman is an astrophysics PhD student, and though her research focus has never included exoplanets she has the unique experience of applying machine learning algorithms to various astrophysical problems. Thus she will play a key role in integrating the scientific and technical aspects of this project.
+
+This project will also benefit from advice and networking with experts in the field. Leah Zuckerman works closely with a Post-Doctoral researcher in Machine Learning at the National Solar Observatory, who will be aptly placed to provide guidance on machine learning best practices. Leah and Anna Zuckerman also have a strong network of peers in the Astrophysics PhD program who are experts in explanatory science. These students may provide feedback on the scientific validity of our methods and results.  
+
+\subsection{Milestones and Timeline}
+% When do you expect to accomplish what part of your proposed work?
+
+% Highlight the importance of starting early and continuously evolving the project as it progresses. Explain how you plan to divide the project into manageable subtasks and prioritize them. Talk about the importance of team communication and collaboration.
+
+% Outline the key milestones of the project, with a projected timeline for each phase. This should include checkpoints for revisiting and revising the proposal based on progress and feedback.
+
+We will make sure to start early in the semester to allow ourselves time to get feedback and to let the project evolve as we develop our methodology. We will be sure to communicate as a team (we will use the platform Discord to facilitate streamlined and efficient communication) in order to collaborate effectively. We know from past experience how important it is to work effectively as a group. 
+
+\noindent Our proposed timeline of work is as follows:
+\medskip
+
+
+\newcommand{\foo}{\hspace{-2.3pt}$\bullet$ \hspace{5pt}}
+\scalebox{1}{
+\begin{tabular}{r |@{\foo} l}
+
+6/26/23 & Submit this proposal \\
+6/30/23 & Finished data exploration and investigation of various feature engineering methods \\
+7/03/23 & Finished research of different ML techniques and basic implementation of each \\
+7/14/23 & Begun evaluation of each potential ML algorithm + optimal feature engineering \\
+7/14/23 & Submit Project Progress Report\\
+7/20/23 & Finalize evaluation of each algorithm and determine which is most effective \\
+7/21/23 & Draft of the final report and presentation slides \\ 
+7/24/23 & Submit Project Final Report and Presentation
+
+\end{tabular}
+}
+
+\section{Conclusion}
+% Wrap up the proposal with a summary of the project's significance and expected outcomes. Restate the motivations behind the project and its potential benefits. This section could also contain any final thoughts or considerations relevant to the project's implementation.
+
+The groundbreaking detection of the exoplanetary system PSR1257 + 12 in 1992 marked a significant milestone in understanding planets outside our solar system. Since then, the detection of new exoplanetary systems has become crucial for studying the formation and evolution of planetary systems and investigating conditions for life. Transit photometry, measuring periodic dips in starlight, has been the most successful method for exoplanet detection. Recent advancements in time-domain optical surveys have made transit photometry even more promising. In this project, the group aims to explore machine learning algorithms to automate the identification of exoplanet transits in stellar lightcurves, combining the frontiers of exoplanet science and the power of machine learning.
+
+\bibliography{works_cited}{}
+\bibliographystyle{aasjournal}
+
+\end{document}
+
